@@ -1,0 +1,164 @@
+/* ============================================================
+   design-tokens.css — 团队协作工具 MVP Design Tokens v1.0
+   与 Spec v1.0 §8 严格一致 | 设计师：颜好看 | 2026-08-05
+   前端 import 此文件，禁止硬编码颜色（唯一例外 #fff/#000）
+   主题：:root 浅色（默认）+ [data-theme="dark"] 深色
+   ============================================================ */
+
+:root {
+  /* ---------- A1-Identity 品牌色（纯色非渐变） ---------- */
+  --color-primary-50:  #EEF2FF;   /* 浅底：选中背景、次级按钮底 */
+  --color-primary-500: #6366F1;   /* 辅助强调：选中态、链接 hover */
+  --color-primary-600: #4F46E5;   /* 品牌主色 Primary */
+  --color-primary-700: #4338CA;   /* Primary hover */
+  --color-primary-800: #3730A3;   /* Primary active */
+
+  /* ---------- A1 中性色（浅色主题 - 默认） ---------- */
+  --bg:          #F8FAFC;
+  --surface:     #FFFFFF;
+  --surface-warm:#F1F5F9;
+  --fg:          #1E293B;
+  --fg-2:        #475569;
+  --muted:       #64748B;
+  --meta:        #94A3B8;
+  --border:      #E2E8F0;
+  --border-soft: #F1F5F9;
+  --focus-ring:  0 0 0 3px rgba(79, 70, 229, 0.35);
+
+  /* ---------- A2 语义色（浅色） ---------- */
+  --success: #16A34A;
+  --warn:    #D97706;
+  --danger:  #DC2626;
+  --info:    #2563EB;
+
+  /* ---------- C-extension 状态标签色板（双主题通用） ---------- */
+  --tag-blue:   #4EA7FC;
+  --tag-green:  #4CB782;
+  --tag-amber:  #D29922;
+  --tag-purple: #A78BFA;
+  --tag-rose:   #F76B8A;
+
+  /* ---------- A2 字体 ---------- */
+  --font-display: Inter, 'Noto Sans SC', -apple-system, sans-serif;
+  --font-body:    Inter, 'Noto Sans SC', -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  /* 字号阶梯（8 级，12/14/16/18/20/24/32/40） */
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   18px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  32px;
+  --text-4xl:  40px;
+
+  /* 字重三级 */
+  --font-regular:  400;
+  --font-medium:   510;
+  --font-semibold: 590;
+
+  /* 行高/字距 */
+  --leading-body:    1.5;
+  --leading-heading: 1.25;
+  --tracking-normal: 0em;
+  --tracking-heading: -0.02em;
+  --tracking-caps:   0.06em;
+
+  /* ---------- A2 间距（4px 网格） ---------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---------- A2 圆角（上限 16px，杜绝 ≥24px 过度圆滑） ---------- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ---------- A2 阴影（仅弹层使用 raised） ---------- */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px rgba(0, 0, 0, 0.12);
+
+  /* ---------- A2 动效（≤300ms，禁弹跳缓动） ---------- */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --motion-slow:   300ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out:      cubic-bezier(0, 0, 0.2, 1);
+
+  /* ---------- 图标（lucide-react 唯一） ---------- */
+  --icon-sm:   16px;
+  --icon-md:   20px;
+  --icon-lg:   24px;
+  --icon-stroke: 1.5;
+
+  /* ---------- 布局 ---------- */
+  --sidebar-width:    240px;
+  --board-column-w:   272px;
+  --drawer-width:     480px;
+  --container-max:    1280px;
+  --header-height:    56px;
+
+  /* ---------- 断点 ---------- */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+
+  /* ---------- z-index 层级 ---------- */
+  --z-base:     0;
+  --z-dropdown: 1000;
+  --z-sticky:   1100;
+  --z-drawer:   1200;
+  --z-modal:    1300;
+  --z-toast:    1400;
+}
+
+/* ============================================================
+   深色主题：data-theme="dark" 切换 CSS 变量，共用语义 Token
+   ============================================================ */
+[data-theme="dark"] {
+  /* A1 中性色（深色 - Linear 风格） */
+  --bg:          #0D1117;
+  --surface:     #161B22;
+  --surface-warm:#21262D;
+  --fg:          #F0F6FC;
+  --fg-2:        #D0D6E0;
+  --muted:       #8A8F98;
+  --meta:        #484F58;
+  --border:      #282A2F;
+  --border-soft: rgba(255, 255, 255, 0.05);
+  --focus-ring:  0 0 0 3px rgba(99, 102, 241, 0.45);
+
+  /* A2 语义色（深色） */
+  --success: #3FB950;
+  --warn:    #D29922;
+  --danger:  #F85149;
+  --info:    #58A6FF;
+
+  /* 深色弹层阴影更含蓄 */
+  --elev-raised: 0 2px 8px rgba(0, 0, 0, 0.5);
+
+  /* 品牌色深浅主题一致，仅前景与层级不同 */
+}
+
+/* ============================================================
+   可访问性：尊重系统减少动效偏好
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

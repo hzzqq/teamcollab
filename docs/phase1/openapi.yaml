@@ -1,0 +1,570 @@
+openapi: 3.0.3
+info:
+  title: TeamCollab MVP API
+  version: 1.0.0
+  description: 团队协作工具 MVP REST API（看板/任务/成员/通知）。统一响应格式 { code, data, message }，code=0 成功。
+servers:
+  - url: http://localhost:8000
+    description: FastAPI 本地开发
+tags:
+  - name: auth
+    description: 认证
+  - name: teams
+    description: 团队与成员
+  - name: boards
+    description: 看板
+  - name: tasks
+    description: 任务
+  - name: notifications
+    description: 通知
+
+paths:
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: 注册（创建用户 + 默认团队）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          description: 邮箱已注册（code=40901）
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: 登录（OAuth2 Password Flow）
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, description: 邮箱 }
+                password: { type: string }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: 凭证错误（code=40101）
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新 access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: 新 access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+  /api/v1/me:
+    get:
+      tags: [auth]
+      summary: 当前用户信息 + 团队 + 角色
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+
+  /api/v1/teams:
+    post:
+      tags: [teams]
+      summary: 创建团队
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+  /api/v1/teams/{teamId}/members:
+    get:
+      tags: [teams]
+      summary: 团队成员列表
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 成员列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 0 }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
+    post:
+      tags: [teams]
+      summary: 邀请成员（admin+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { $ref: '#/components/schemas/Role' }
+      responses:
+        '201': { description: 已邀请 }
+        '403': { description: 无权限（code=40301） }
+  /api/v1/teams/{teamId}/members/{userId}/role:
+    patch:
+      tags: [teams]
+      summary: 修改成员角色（admin+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: '#/components/schemas/Role' }
+      responses:
+        '200': { description: 已更新 }
+
+  /api/v1/teams/{teamId}/boards:
+    get:
+      tags: [boards]
+      summary: 看板列表
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 看板列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 0 }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Board' }
+    post:
+      tags: [boards]
+      summary: 创建看板（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Board' }
+  /api/v1/boards/{boardId}:
+    get:
+      tags: [boards]
+      summary: 看板详情（含列 + 任务）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 看板详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BoardDetail' }
+    patch:
+      tags: [boards]
+      summary: 更新看板
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        '200': { description: 已更新 }
+    delete:
+      tags: [boards]
+      summary: 删除看板（admin+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: 已删除 }
+  /api/v1/boards/{boardId}/columns:
+    post:
+      tags: [boards]
+      summary: 创建列（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        '201': { description: 创建成功 }
+  /api/v1/columns/{columnId}:
+    patch:
+      tags: [boards]
+      summary: 更新列
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: columnId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        '200': { description: 已更新 }
+
+  /api/v1/boards/{boardId}/tasks:
+    post:
+      tags: [tasks]
+      summary: 创建任务（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+    get:
+      tags: [tasks]
+      summary: 任务列表 / 搜索
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: q, in: query, required: false, schema: { type: string }, description: 关键词（标题/描述 ILIKE） }
+        - { name: assignee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [todo, in_progress, done] } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: 分页任务列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedTasks' }
+  /api/v1/tasks/{taskId}:
+    get:
+      tags: [tasks]
+      summary: 任务详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 任务详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+    patch:
+      tags: [tasks]
+      summary: 更新任务
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+    delete:
+      tags: [tasks]
+      summary: 删除任务
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: 已删除 }
+  /api/v1/boards/{boardId}/columns/{columnId}/tasks/{taskId}/position:
+    patch:
+      tags: [tasks]
+      summary: 拖拽落位（目标列 + 新顺序）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: columnId, in: path, required: true, schema: { type: string, format: uuid }, description: 目标列 }
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position]
+              properties:
+                position: { type: integer, description: 目标列内新顺序（0-based） }
+      responses:
+        '200':
+          description: 已更新位置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+
+  /api/v1/notifications/stream:
+    get:
+      tags: [notifications]
+      summary: SSE 通知流（EventSource）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: token, in: query, required: true, schema: { type: string }, description: access token（EventSource 无法自定义 Header，走 query） }
+      responses:
+        '200':
+          description: text/event-stream，事件 data 为 Notification JSON
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: 'data: {"type":"task_assigned","payload":{}}\n\n'
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      summary: 历史通知列表
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 分页通知
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, example: 0 }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Notification' }
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+                      hasMore: { type: boolean }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Role:
+      type: string
+      enum: [owner, admin, member, viewer]
+    RegisterRequest:
+      type: object
+      required: [email, password, display_name]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        display_name: { type: string, maxLength: 100 }
+    AuthResponse:
+      type: object
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            access_token: { type: string }
+            refresh_token: { type: string }
+            token_type: { type: string, example: bearer }
+        message: { type: string, example: '' }
+    MeResponse:
+      type: object
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            team: { $ref: '#/components/schemas/Team' }
+            role: { $ref: '#/components/schemas/Role' }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string }
+    Team:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+    Member:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        role: { $ref: '#/components/schemas/Role' }
+        created_at: { type: string, format: date-time }
+    Board:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+    BoardDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid }
+        name: { type: string }
+        columns:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              position: { type: integer }
+              tasks:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+    TaskCreateRequest:
+      type: object
+      required: [title, column_id]
+      properties:
+        title: { type: string, maxLength: 200 }
+        column_id: { type: string, format: uuid }
+        description: { type: string }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        priority: { type: string, enum: [low, medium, high, urgent], default: medium }
+        due_date: { type: string, format: date, nullable: true }
+    TaskUpdateRequest:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        column_id: { type: string, format: uuid }
+        description: { type: string, nullable: true }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        status: { type: string, enum: [todo, in_progress, done] }
+        due_date: { type: string, format: date, nullable: true }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        board_id: { type: string, format: uuid }
+        column_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        status: { type: string, enum: [todo, in_progress, done] }
+        position: { type: integer }
+        due_date: { type: string, format: date, nullable: true }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PaginatedTasks:
+      type: object
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Task' }
+            total: { type: integer }
+            page: { type: integer }
+            limit: { type: integer }
+            hasMore: { type: boolean }
+        message: { type: string, example: '' }
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [task_assigned, task_moved, comment_added] }
+        payload: { type: object }
+        is_read: { type: boolean }
+        created_at: { type: string, format: date-time }

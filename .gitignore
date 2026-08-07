@@ -1,0 +1,43 @@
+# ===== Dependencies =====
+node_modules/
+.pnp
+.pnp.js
+.npm-cache/
+
+# ===== Frontend build outputs =====
+web/.next/
+web/out/
+web/dist/
+web/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# ===== Python =====
+server/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== Local PostgreSQL instance (binaries + data) — NOT source =====
+.pgtmp/
+
+# ===== Local agent / workbuddy memory (not project source) =====
+.workbuddy/
+
+# ===== Env files (keep .env.example instead) =====
+.env
+.env.*
+!.env.example
+
+# ===== Logs =====
+*.log
+pg.log
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db

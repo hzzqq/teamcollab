@@ -1,0 +1,140 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "$description": "团队协作工具 MVP Design Tokens v1.0 — 与 Spec v1.0 §8 严格一致 | 设计师：颜好看 | 2026-08-05",
+  "color": {
+    "primary": {
+      "50":   { "$type": "color", "$value": "#EEF2FF", "description": "Primary 浅底（选中背景、按钮次级底）" },
+      "500":  { "$type": "color", "$value": "#6366F1", "description": "辅助强调（选中态、链接 hover）" },
+      "600":  { "$type": "color", "$value": "#4F46E5", "description": "品牌主色 Primary（纯色非渐变）" },
+      "700":  { "$type": "color", "$value": "#4338CA", "description": "Primary hover" },
+      "800":  { "$type": "color", "$value": "#3730A3", "description": "Primary active" }
+    },
+    "light": {
+      "bg":          { "$type": "color", "$value": "#F8FAFC", "description": "页面背景（浅色主题默认）" },
+      "surface":     { "$type": "color", "$value": "#FFFFFF", "description": "卡片/面板/侧栏背景" },
+      "surfaceWarm": { "$type": "color", "$value": "#F1F5F9", "description": "次级面板、hover 行" },
+      "fg":          { "$type": "color", "$value": "#1E293B", "description": "主文本" },
+      "fg2":         { "$type": "color", "$value": "#475569", "description": "次级文本" },
+      "muted":       { "$type": "color", "$value": "#64748B", "description": "辅助文本/占位" },
+      "meta":        { "$type": "color", "$value": "#94A3B8", "description": "三级元数据（时间戳等）" },
+      "border":      { "$type": "color", "$value": "#E2E8F0", "description": "默认边框" },
+      "borderSoft":  { "$type": "color", "$value": "#F1F5F9", "description": "内部行分隔" },
+      "focusRing":   { "$type": "color", "$value": "rgba(79,70,229,0.35)", "description": "键盘焦点环（浅色）" }
+    },
+    "dark": {
+      "bg":          { "$type": "color", "$value": "#0D1117", "description": "页面背景（深色主题）" },
+      "surface":     { "$type": "color", "$value": "#161B22", "description": "卡片/面板背景" },
+      "surfaceWarm": { "$type": "color", "$value": "#21262D", "description": "次级面板、hover 行" },
+      "fg":          { "$type": "color", "$value": "#F0F6FC", "description": "主文本" },
+      "fg2":         { "$type": "color", "$value": "#D0D6E0", "description": "次级文本" },
+      "muted":       { "$type": "color", "$value": "#8A8F98", "description": "辅助文本" },
+      "meta":        { "$type": "color", "$value": "#484F58", "description": "三级元数据" },
+      "border":      { "$type": "color", "$value": "#282A2F", "description": "默认边框" },
+      "borderSoft":  { "$type": "color", "$value": "rgba(255,255,255,0.05)", "description": "内部行分隔" },
+      "focusRing":   { "$type": "color", "$value": "rgba(99,102,241,0.45)", "description": "键盘焦点环（深色）" }
+    },
+    "semantic": {
+      "success": { "$type": "color", "light": "#16A34A", "dark": "#3FB950", "description": "已完成/成功" },
+      "warn":    { "$type": "color", "light": "#D97706", "dark": "#D29922", "description": "即将到期/警告" },
+      "danger":  { "$type": "color", "light": "#DC2626", "dark": "#F85149", "description": "已逾期/删除/错误" },
+      "info":    { "$type": "color", "light": "#2563EB", "dark": "#58A6FF", "description": "通知/提示" }
+    },
+    "tag": {
+      "blue":   { "$type": "color", "$value": "#4EA7FC", "description": "状态标签-蓝（研发类）" },
+      "green":  { "$type": "color", "$value": "#4CB782", "description": "状态标签-绿（完成类）" },
+      "amber":  { "$type": "color", "$value": "#D29922", "description": "状态标签-琥珀（高优先级）" },
+      "purple": { "$type": "color", "$value": "#A78BFA", "description": "状态标签-紫（设计类）" },
+      "rose":   { "$type": "color", "$value": "#F76B8A", "description": "状态标签-玫红（紧急）" }
+    }
+  },
+  "font": {
+    "family": {
+      "display": { "$type": "fontFamily", "$value": "Inter, 'Noto Sans SC', -apple-system, sans-serif", "description": "标题/正文" },
+      "body":    { "$type": "fontFamily", "$value": "Inter, 'Noto Sans SC', -apple-system, sans-serif", "description": "正文" },
+      "mono":    { "$type": "fontFamily", "$value": "'JetBrains Mono', 'Fira Code', monospace", "description": "任务 ID/数字" }
+    },
+    "size": {
+      "xs":   { "$type": "dimension", "$value": 12, "description": "辅助文字/标签" },
+      "sm":   { "$type": "dimension", "$value": 14, "description": "表格/列表正文" },
+      "base": { "$type": "dimension", "$value": 16, "description": "默认正文" },
+      "lg":   { "$type": "dimension", "$value": 18, "description": "三级标题" },
+      "xl":   { "$type": "dimension", "$value": 20, "description": "页面标题" },
+      "2xl":  { "$type": "dimension", "$value": 24, "description": "二级标题" },
+      "3xl":  { "$type": "dimension", "$value": 32, "description": "一级标题" },
+      "4xl":  { "$type": "dimension", "$value": 40, "description": "Hero/大标题" }
+    },
+    "weight": {
+      "regular":  { "$type": "fontWeight", "$value": 400, "description": "正文" },
+      "medium":   { "$type": "fontWeight", "$value": 510, "description": "按钮/表头/小标题" },
+      "semibold": { "$type": "fontWeight", "$value": 590, "description": "大标题/强调" }
+    },
+    "lineHeight": {
+      "body":    { "$type": "number", "$value": 1.5, "description": "正文行高" },
+      "heading": { "$type": "number", "$value": 1.25, "description": "标题行高" }
+    },
+    "letterSpacing": {
+      "normal":  { "$type": "dimension", "$value": "0em", "description": "正文" },
+      "heading": { "$type": "dimension", "$value": "-0.02em", "description": "大标题负字距" },
+      "caps":    { "$type": "dimension", "$value": "0.06em", "description": "ALL CAPS/按钮文字" }
+    }
+  },
+  "spacing": {
+    "1":  { "$type": "dimension", "$value": 4,  "description": "图标与文字" },
+    "2":  { "$type": "dimension", "$value": 8,  "description": "紧凑间距" },
+    "3":  { "$type": "dimension", "$value": 12, "description": "标准间距" },
+    "4":  { "$type": "dimension", "$value": 16, "description": "卡片内边距" },
+    "5":  { "$type": "dimension", "$value": 20, "description": "宽松间距" },
+    "6":  { "$type": "dimension", "$value": 24, "description": "区块间距" },
+    "8":  { "$type": "dimension", "$value": 32, "description": "大区块间距" },
+    "10": { "$type": "dimension", "$value": 40, "description": "页面级间距" },
+    "12": { "$type": "dimension", "$value": 48, "description": "最大间距" },
+    "16": { "$type": "dimension", "$value": 64, "description": "仅 Hero 区" }
+  },
+  "radius": {
+    "sm":   { "$type": "dimension", "$value": 4,   "description": "Badge/Tag/输入框" },
+    "md":   { "$type": "dimension", "$value": 8,   "description": "按钮/看板卡片/列表行" },
+    "lg":   { "$type": "dimension", "$value": 12,  "description": "卡片/弹窗（上限 16px）" },
+    "pill": { "$type": "dimension", "$value": 9999, "description": "头像/状态点" }
+  },
+  "shadow": {
+    "flat":   { "$type": "boxShadow", "$value": "none", "description": "默认无阴影（边框优先）" },
+    "ring":   { "$type": "boxShadow", "$value": "0 0 0 1px var(--border)", "description": "层级环（1px 边框）" },
+    "raised": { "$type": "boxShadow", "$value": "0 2px 8px rgba(0,0,0,0.12)", "description": "仅弹层/下拉/拖拽中卡片" }
+  },
+  "motion": {
+    "fast":         { "$type": "duration", "$value": 150, "description": "基准：hover/选中/即时反馈" },
+    "base":         { "$type": "duration", "$value": 200, "description": "内容进入" },
+    "slow":         { "$type": "duration", "$value": 300, "description": "上限：Drawer 滑出/弹窗（≤300ms）" },
+    "easeStandard": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1], "description": "标准缓动（禁弹跳）" },
+    "easeOut":      { "$type": "cubicBezier", "$value": [0, 0, 0.2, 1], "description": "退场缓动" }
+  },
+  "icon": {
+    "size": {
+      "sm": { "$type": "dimension", "$value": 16, "description": "行内图标/表格内操作/状态点旁" },
+      "md": { "$type": "dimension", "$value": 20, "description": "按钮内图标/输入框前缀后缀" },
+      "lg": { "$type": "dimension", "$value": 24, "description": "独立图标/空状态/Sidebar 导航" }
+    },
+    "strokeWidth": { "$type": "number", "$value": 1.5, "description": "Lucide 描边宽度（全项目统一）" }
+  },
+  "layout": {
+    "sidebarWidth":    { "$type": "dimension", "$value": 240, "description": "左侧导航宽（可折叠）" },
+    "boardColumnWidth": { "$type": "dimension", "$value": 272, "description": "看板列宽" },
+    "drawerWidth":     { "$type": "dimension", "$value": 480, "description": "任务详情 Drawer 宽" },
+    "containerMax":    { "$type": "dimension", "$value": 1280, "description": "内容最大宽度" },
+    "headerHeight":    { "$type": "dimension", "$value": 56, "description": "顶部视图栏高" }
+  },
+  "breakpoint": {
+    "sm":  { "$type": "dimension", "$value": 640, "description": "手机横屏" },
+    "md":  { "$type": "dimension", "$value": 768, "description": "平板竖屏（<768 收为 TabBar）" },
+    "lg":  { "$type": "dimension", "$value": 1024, "description": "笔记本" },
+    "xl":  { "$type": "dimension", "$value": 1280, "description": "桌面" }
+  },
+  "zIndex": {
+    "base":     { "$type": "number", "$value": 0 },
+    "dropdown": { "$type": "number", "$value": 1000 },
+    "sticky":   { "$type": "number", "$value": 1100 },
+    "drawer":   { "$type": "number", "$value": 1200 },
+    "modal":    { "$type": "number", "$value": 1300 },
+    "toast":    { "$type": "number", "$value": 1400 }
+  }
+}

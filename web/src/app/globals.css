@@ -1,0 +1,164 @@
+/* ============================================================
+   globals.css — Tailwind CSS 4 CSS-first 配置
+   Tokens 来源：src/styles/design-tokens.css（Spec v1.0 §8 锁定）
+   主题：:root 浅色（默认）+ [data-theme="dark"] 深色
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;510;590&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../styles/design-tokens.css";
+
+/* dark: 变体映射到 data-theme="dark"（DESIGN.md §9.2） */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------
+   Token → Tailwind utility 映射（一一对应 design-tokens.css）
+   @theme inline：utility 内联引用 var()，data-theme 切换即时生效
+   ------------------------------------------------------------ */
+@theme inline {
+  /* 品牌色 */
+  --color-primary-50:  var(--color-primary-50);
+  --color-primary-500: var(--color-primary-500);
+  --color-primary-600: var(--color-primary-600);
+  --color-primary-700: var(--color-primary-700);
+  --color-primary-800: var(--color-primary-800);
+
+  /* 中性色 */
+  --color-bg:           var(--bg);
+  --color-surface:      var(--surface);
+  --color-surface-warm: var(--surface-warm);
+  --color-fg:           var(--fg);
+  --color-fg-2:         var(--fg-2);
+  --color-muted:        var(--muted);
+  --color-meta:         var(--meta);
+  --color-border:       var(--border);
+  --color-border-soft:  var(--border-soft);
+
+  /* 语义色 */
+  --color-success: var(--success);
+  --color-warn:    var(--warn);
+  --color-danger:  var(--danger);
+  --color-info:    var(--info);
+
+  /* 状态标签色板 */
+  --color-tag-blue:   var(--tag-blue);
+  --color-tag-green:  var(--tag-green);
+  --color-tag-amber:  var(--tag-amber);
+  --color-tag-purple: var(--tag-purple);
+  --color-tag-rose:   var(--tag-rose);
+
+  /* 字体 */
+  --font-display: var(--font-display);
+  --font-body:    var(--font-body);
+  --font-mono:    var(--font-mono);
+
+  /* 字号阶梯 */
+  --text-xs:   var(--text-xs);
+  --text-sm:   var(--text-sm);
+  --text-base: var(--text-base);
+  --text-lg:   var(--text-lg);
+  --text-xl:   var(--text-xl);
+  --text-2xl:  var(--text-2xl);
+  --text-3xl:  var(--text-3xl);
+  --text-4xl:  var(--text-4xl);
+
+  /* 圆角 */
+  --radius-sm:   var(--radius-sm);
+  --radius-md:   var(--radius-md);
+  --radius-lg:   var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+
+  /* 阴影（仅弹层 raised） */
+  --shadow-flat:   var(--elev-flat);
+  --shadow-ring:   var(--elev-ring);
+  --shadow-raised: var(--elev-raised);
+
+  /* 4px 网格间距 */
+  --spacing-1:  var(--space-1);
+  --spacing-2:  var(--space-2);
+  --spacing-3:  var(--space-3);
+  --spacing-4:  var(--space-4);
+  --spacing-5:  var(--space-5);
+  --spacing-6:  var(--space-6);
+  --spacing-8:  var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
+
+  /* 动效 */
+  --duration-fast:   var(--motion-fast);
+  --duration-base:   var(--motion-base);
+  --duration-slow:   var(--motion-slow);
+  --ease-standard:   var(--ease-standard);
+  --ease-out:        var(--ease-out);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: var(--leading-body);
+  }
+  ::selection {
+    background-color: var(--color-primary-50);
+  }
+}
+
+@layer utilities {
+  /* 骨架屏微光（DESIGN.md §4.6，1200ms 循环） */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--surface-warm);
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.35),
+      transparent
+    );
+    animation: skeleton-slide 1200ms infinite;
+  }
+  [data-theme="dark"] .skeleton-shimmer::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06),
+      transparent
+    );
+  }
+  @keyframes skeleton-slide {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /* 横向滚动条隐藏（看板） */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

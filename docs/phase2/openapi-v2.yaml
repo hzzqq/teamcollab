@@ -1,0 +1,1174 @@
+openapi: 3.0.3
+info:
+  title: TeamCollab MVP API
+  version: 2.0.0
+  description: >
+    团队协作工具 MVP REST API（看板/任务/成员/评论/通知）。Phase 2 契约，前后端联调唯一依据。
+
+    统一响应格式：{ "code": 0, "data": {}, "message": "" }，code=0 成功。
+    错误码：40001 参数校验失败 / 40101 未认证或 token 过期 / 40301 无权限(RBAC) /
+    40401 资源不存在(含跨租户访问，不泄露存在性) / 40901 资源冲突 / 42901 频率限制 / 50000 服务器内部错误。
+
+    认证：Authorization: Bearer <access_token>。SSE 端点因 EventSource 无法自定义 Header，走 query token。
+
+    版本锚定：next@15.5.9+ / fastapi@0.140.x / lucide-react@1.24.0（全项目唯一图标库，禁止 emoji 图标）。
+servers:
+  - url: http://localhost:8000
+    description: FastAPI 本地开发
+tags:
+  - name: auth
+    description: 认证
+  - name: teams
+    description: 团队与成员
+  - name: boards
+    description: 看板
+  - name: tasks
+    description: 任务
+  - name: comments
+    description: 任务评论
+  - name: notifications
+    description: 通知
+
+paths:
+  # ---------------- AUTH ----------------
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: 注册（创建用户 + 默认团队）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功，返回用户信息 + token 对
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          description: 邮箱已注册（code=40901），不泄露账户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: 登录（OAuth2 Password Flow，application/x-www-form-urlencoded）
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, format: email, description: 邮箱 }
+                password: { type: string }
+      responses:
+        '200':
+          description: 登录成功，返回 access + refresh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: 凭证错误（code=40101）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新 access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: 新 access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '401':
+          description: refresh token 无效或过期（code=40101）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------- ME ----------------
+  /api/v1/me:
+    get:
+      tags: [auth]
+      summary: 当前用户信息 + 所属团队 + 角色
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: 未认证（code=40101）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/me/tasks:
+    get:
+      tags: [tasks]
+      summary: 我的任务聚合（跨项目，只返回分配给当前用户的任务）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [todo, in_progress, done] }, description: 按状态筛选 }
+        - { name: q, in: query, required: false, schema: { type: string }, description: 关键词（标题/描述 ILIKE） }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: 分页任务列表（逾期置顶由前端按 due_date 处理）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTasks'
+        '401':
+          description: 未认证（code=40101）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------- TEAMS ----------------
+  /api/v1/teams:
+    post:
+      tags: [teams]
+      summary: 创建团队（创建者自动成为 owner）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/teams/{teamId}/members:
+    get:
+      tags: [teams]
+      summary: 团队成员列表（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 成员列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberListResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 团队不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [teams]
+      summary: 邀请成员（admin+，按邮箱匹配已注册用户）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { $ref: '#/components/schemas/Role' }
+      responses:
+        '201':
+          description: 已邀请，返回新成员
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '400':
+          description: 邮箱不存在于平台 / role 非法 / 已是成员（code=40001 或 40901）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/teams/{teamId}/members/{userId}/role:
+    patch:
+      tags: [teams]
+      summary: 修改成员角色（admin+；owner 不可被降级、不可被修改）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: '#/components/schemas/Role' }
+      responses:
+        '200':
+          description: 已更新，返回更新后成员
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '400':
+          description: role 非法 / 目标是 owner（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 成员不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/teams/{teamId}/members/{userId}:
+    delete:
+      tags: [teams]
+      summary: 移除成员（admin+；owner 不可被移除）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 已移除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: 无权限或目标是 owner（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 成员不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------- BOARDS ----------------
+  /api/v1/teams/{teamId}/boards:
+    get:
+      tags: [boards]
+      summary: 看板列表（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 看板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardListResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [boards]
+      summary: 创建看板（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/boards/{boardId}:
+    get:
+      tags: [boards]
+      summary: 看板详情（含列 + 各列任务，按 position 排序）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 看板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardDetailResponse'
+        '404':
+          description: 看板不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [boards]
+      summary: 更新看板（member+，仅 name）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 看板不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [boards]
+      summary: 删除看板（admin+，级联删除列与任务）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 看板不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/boards/{boardId}/columns:
+    post:
+      tags: [boards]
+      summary: 创建列（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                position: { type: integer, default: 0, description: 缺省追加到末尾（当前最大 position + 1） }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ColumnResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 看板不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/columns/{columnId}:
+    patch:
+      tags: [boards]
+      summary: 更新列（member+，name/position）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: columnId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                position: { type: integer }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ColumnResponse'
+        '403':
+          description: 无权限（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 列不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------- TASKS ----------------
+  /api/v1/boards/{boardId}/tasks:
+    post:
+      tags: [tasks]
+      summary: 创建任务（member+，若 assignee_id 与当前用户不同则生成 task_assigned 通知）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 看板/列不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [tasks]
+      summary: 任务列表 / 搜索（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: q, in: query, required: false, schema: { type: string }, description: 关键词（标题/描述 ILIKE） }
+        - { name: assignee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [todo, in_progress, done] } }
+        - { name: column_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: 分页任务列表（默认按 position 排序）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTasks'
+        '404':
+          description: 看板不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/tasks/{taskId}:
+    get:
+      tags: [tasks]
+      summary: 任务详情（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 任务详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          description: 任务不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [tasks]
+      summary: 更新任务（member+，任意可改字段；assignee 变化时生成 task_assigned 通知；完成状态变化推送 SSE）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: viewer 尝试编辑（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 任务不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [tasks]
+      summary: 删除任务（member+）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: viewer 尝试删除（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 任务不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/boards/{boardId}/columns/{columnId}/tasks/{taskId}/position:
+    patch:
+      tags: [tasks]
+      summary: 拖拽落位（member+，更新列与顺序，推送 task_moved 通知）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: columnId, in: path, required: true, schema: { type: string, format: uuid }, description: 目标列 }
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_column_id, position]
+              properties:
+                target_column_id: { type: string, format: uuid, description: 目标列 ID（与路径 columnId 一致，冗余校验） }
+                position: { type: integer, minimum: 0, description: 目标列内新顺序（0-based） }
+      responses:
+        '200':
+          description: 已更新位置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          description: target_column_id 与路径不一致（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: viewer 尝试移动（code=40301）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 任务/列不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------- COMMENTS ----------------
+  /api/v1/tasks/{taskId}/comments:
+    get:
+      tags: [comments]
+      summary: 评论列表（member+，按 created_at 升序分页）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: 分页评论列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedComments'
+        '404':
+          description: 任务不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [comments]
+      summary: 发评论（member+，检测 @username 提及并通知被提及成员）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 2000, description: 支持 @username 提及，格式 @后跟用户 display_name 或邮箱前缀 }
+      responses:
+        '201':
+          description: 创建成功（若命中 @提及，已向被提及者生成 comment_added 通知）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          description: 参数校验失败（code=40001）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 任务不存在或跨租户（code=40401）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------- NOTIFICATIONS ----------------
+  /api/v1/notifications/stream:
+    get:
+      tags: [notifications]
+      summary: SSE 通知流（EventSource，仅推送当前用户的通知事件）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: token, in: query, required: true, schema: { type: string }, description: access token（EventSource 无法自定义 Header，走 query） }
+      responses:
+        '200':
+          description: text/event-stream，事件 data 为 Notification JSON
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: 'data: {"id":"...","type":"task_assigned","payload":{...},"created_at":"..."}\n\n'
+        '401':
+          description: token 无效或过期（code=40101）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      summary: 历史通知列表（登录用户自己的，按 created_at 倒序）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: unread, in: query, required: false, schema: { type: boolean }, description: 仅未读（true 时过滤 is_read=false） }
+      responses:
+        '200':
+          description: 分页通知列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotifications'
+        '401':
+          description: 未认证（code=40101）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    # ---------------- 基础 ----------------
+    ErrorResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code:
+          type: integer
+          enum: [40001, 40101, 40301, 40401, 40901, 42901, 50000]
+          description: 非 0 即错误
+        data:
+          type: object
+          nullable: true
+          description: 错误时恒为 null
+        message:
+          type: string
+          description: 人类可读错误描述（不泄露内部细节）
+    OkResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            ok: { type: boolean, example: true }
+        message: { type: string, example: '' }
+    PageMeta:
+      type: object
+      properties:
+        total: { type: integer, example: 100 }
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        hasMore: { type: boolean, example: true }
+
+    # ---------------- 枚举 ----------------
+    Role:
+      type: string
+      enum: [owner, admin, member, viewer]
+      description: owner=团队创建者(不可降级) / admin=管理员 / member=成员 / viewer=只读
+    Priority:
+      type: string
+      enum: [low, medium, high, urgent]
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done]
+    NotificationType:
+      type: string
+      enum: [task_assigned, task_moved, comment_added, task_due_soon]
+      description: task_assigned=被分配 / task_moved=任务被移动 / comment_added=被@提及或评论 / task_due_soon=距截止≤24h
+
+    # ---------------- 认证 ----------------
+    RegisterRequest:
+      type: object
+      required: [email, password, display_name]
+      properties:
+        email: { type: string, format: email, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 72, description: bcrypt 输入上限 72 字节 }
+        display_name: { type: string, minLength: 1, maxLength: 100 }
+    AuthResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            team: { $ref: '#/components/schemas/Team' }
+            role: { $ref: '#/components/schemas/Role' }
+            access_token: { type: string }
+            refresh_token: { type: string }
+            token_type: { type: string, example: bearer }
+            expires_in: { type: integer, example: 900, description: access token 有效期（秒），MVP 15 分钟 }
+        message: { type: string, example: '' }
+    RefreshResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            access_token: { type: string }
+            token_type: { type: string, example: bearer }
+            expires_in: { type: integer, example: 900 }
+        message: { type: string, example: '' }
+    MeResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            team: { $ref: '#/components/schemas/Team' }
+            role: { $ref: '#/components/schemas/Role' }
+        message: { type: string, example: '' }
+
+    # ---------------- 用户/团队/成员 ----------------
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        created_at: { type: string, format: date-time }
+    Team:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+    TeamResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/Team' }
+        message: { type: string, example: '' }
+    Member:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        role: { $ref: '#/components/schemas/Role' }
+        created_at: { type: string, format: date-time }
+    MemberResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/Member' }
+        message: { type: string, example: '' }
+    MemberListResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+        message: { type: string, example: '' }
+
+    # ---------------- 看板/列 ----------------
+    Board:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    BoardResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/Board' }
+        message: { type: string, example: '' }
+    BoardListResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Board' }
+        message: { type: string, example: '' }
+    BoardColumn:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        board_id: { type: string, format: uuid }
+        name: { type: string }
+        position: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ColumnResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/BoardColumn' }
+        message: { type: string, example: '' }
+    BoardColumnWithTasks:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        board_id: { type: string, format: uuid }
+        name: { type: string }
+        position: { type: integer }
+        tasks:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+    BoardDetailResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            team_id: { type: string, format: uuid }
+            name: { type: string }
+            columns:
+              type: array
+              items: { $ref: '#/components/schemas/BoardColumnWithTasks' }
+        message: { type: string, example: '' }
+
+    # ---------------- 任务 ----------------
+    TaskCreateRequest:
+      type: object
+      required: [title, column_id]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, nullable: true, maxLength: 5000 }
+        column_id: { type: string, format: uuid }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        due_date: { type: string, format: date, nullable: true }
+        start_date: { type: string, format: date, nullable: true, description: 甘特扩展预留，MVP 仅存储不展示 }
+    TaskUpdateRequest:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, nullable: true, maxLength: 5000 }
+        column_id: { type: string, format: uuid }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        due_date: { type: string, format: date, nullable: true }
+        start_date: { type: string, format: date, nullable: true }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        board_id: { type: string, format: uuid }
+        board_name: { type: string, description: 我的任务聚合时附带，便于跳转 }
+        column_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        assignee:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        position: { type: integer }
+        due_date: { type: string, format: date, nullable: true }
+        start_date: { type: string, format: date, nullable: true }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TaskResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/Task' }
+        message: { type: string, example: '' }
+    PaginatedTasks:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Task' }
+            total: { type: integer }
+            page: { type: integer }
+            limit: { type: integer }
+            hasMore: { type: boolean }
+        message: { type: string, example: '' }
+
+    # ---------------- 评论 ----------------
+    Comment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        author:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: string }
+        content: { type: string, maxLength: 2000 }
+        mentions:
+          type: array
+          items: { type: string, format: uuid }
+          description: 被 @ 提及的用户 ID 列表（检测结果，服务端返回）
+        created_at: { type: string, format: date-time }
+    CommentResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/Comment' }
+        message: { type: string, example: '' }
+    PaginatedComments:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Comment' }
+            total: { type: integer }
+            page: { type: integer }
+            limit: { type: integer }
+            hasMore: { type: boolean }
+        message: { type: string, example: '' }
+
+    # ---------------- 通知 ----------------
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        payload:
+          type: object
+          description: >
+            按 type 约定：task_assigned 含 { task_id, task_title, board_id, actor_id }；
+            task_moved 含 { task_id, task_title, board_id, from_column_id, to_column_id, actor_id }；
+            comment_added 含 { task_id, task_title, comment_id, comment_snippet, actor_id }；
+            task_due_soon 含 { task_id, task_title, due_date }
+        is_read: { type: boolean }
+        created_at: { type: string, format: date-time }
+    NotificationResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { $ref: '#/components/schemas/Notification' }
+        message: { type: string, example: '' }
+    PaginatedNotifications:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, example: 0 }
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Notification' }
+            total: { type: integer }
+            page: { type: integer }
+            limit: { type: integer }
+            hasMore: { type: boolean }
+        message: { type: string, example: '' }

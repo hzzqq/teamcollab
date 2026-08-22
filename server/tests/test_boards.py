@@ -1,5 +1,9 @@
 """看板/列冒烟测试。"""
 
+from sqlalchemy import text
+
+from app.core.db import SessionLocal
+
 
 def test_board_crud_and_detail(client, team_with_members):
     t = team_with_members
@@ -41,6 +45,43 @@ def test_delete_board_admin_only(client, team_with_members):
     resp = client.get(f"/api/v1/boards/{t['board']['id']}", headers=t["owner"]["headers"])
     assert resp.status_code == 404
     assert resp.json()["code"] == 40401
+
+
+def test_delete_board_cascades_columns_and_tasks(client, team_with_members):
+    """删除看板应级联清除其下列与任务（核心破坏性操作的数据正确性）。"""
+    t = team_with_members
+    owner = t["owner"]
+    board_id = t["board"]["id"]
+    col_id = t["columns"][0]
+
+    # 在列下建一个任务
+    r = client.post(
+        f"/api/v1/boards/{board_id}/tasks",
+        json={"title": "待级联删除的任务", "column_id": col_id},
+        headers=owner["headers"],
+    )
+    assert r.status_code == 201, r.text
+    task_id = r.json()["data"]["id"]
+
+    # 删除看板
+    r = client.delete(f"/api/v1/boards/{board_id}", headers=owner["headers"])
+    assert r.status_code == 200, r.text
+
+    # 看板详情应 404
+    r = client.get(f"/api/v1/boards/{board_id}", headers=owner["headers"])
+    assert r.status_code == 404
+
+    # 级联核对：任务与列在库中已不存在
+    db = SessionLocal()
+    try:
+        n_task = db.scalar(text("SELECT count(*) FROM tasks WHERE id = :id"), {"id": task_id})
+        n_col = db.scalar(
+            text("SELECT count(*) FROM board_columns WHERE board_id = :id"), {"id": board_id}
+        )
+    finally:
+        db.close()
+    assert n_task == 0, "删除看板后任务应被级联删除"
+    assert n_col == 0, "删除看板后列应被级联删除"
 
 
 def test_column_create_default_position(client, team_with_members):

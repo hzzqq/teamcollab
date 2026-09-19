@@ -14,26 +14,52 @@ from app.repositories.team_repo import team_repo
 from app.repositories.user_repo import user_repo
 from app.services.due_soon_service import due_soon_service
 from app.services.notification_service import notification_service
+from app.services.team_service import MAX_MEMBERS
 
 MAX_TEAM_NAME_LEN = 100
 
 
 class AuthService:
-    def register(self, db: Session, email: str, password: str, display_name: str) -> dict[str, Any]:
+    def register(
+        self,
+        db: Session,
+        email: str,
+        password: str,
+        display_name: str,
+        *,
+        invite_team_id: uuid.UUID | None = None,
+    ) -> dict[str, Any]:
         if user_repo.get_by_email(db, email):
             raise conflict("该邮箱已注册")
+
+        # 邀请注册：目标团队有效且未满员 → 直接入队（不另建默认团队），
+        # 使登录/首页默认落在邀请团队；链接失效或团队满员则回退默认注册流程。
+        invited_team = (
+            team_repo.get_by_id(db, invite_team_id) if invite_team_id else None
+        )
+        can_join_invited = invited_team is not None and (
+            team_repo.count_members(db, invited_team.id) < MAX_MEMBERS
+        )
+
         user = user_repo.create(db, email, hash_password(password), display_name)
-        team_name = f"{display_name} 的团队"[:MAX_TEAM_NAME_LEN]
-        team = team_repo.create(db, team_name)
-        db.flush()  # 主键为 DB 侧 server_default 生成，flush 后才能取到 user.id / team.id
-        team_repo.add_member(db, team.id, user.id, "owner")
+        db.flush()  # 主键为 DB 侧 server_default 生成，flush 后才能取到 user.id
+
+        if can_join_invited:
+            team_repo.add_member(db, invited_team.id, user.id, "member")
+            team, role = invited_team, "member"
+        else:
+            team_name = f"{display_name} 的团队"[:MAX_TEAM_NAME_LEN]
+            team = team_repo.create(db, team_name)
+            db.flush()
+            team_repo.add_member(db, team.id, user.id, "owner")
+            role = "owner"
         db.commit()
         access_token, expires_in = create_access_token(str(user.id))
         refresh_token, _ = create_refresh_token(str(user.id))
         return {
             "user": user,
             "team": team,
-            "role": "owner",
+            "role": role,
             "access_token": access_token,
             "refresh_token": refresh_token,
             "expires_in": expires_in,

@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { UserPlus, Users } from "lucide-react";
+import { Check, Copy, Link2, UserPlus, Users } from "lucide-react";
+import { toast } from "sonner";
+import { ApiError } from "@/lib/api";
 import { useMe, canAdmin } from "@/hooks/use-me";
 import { useMembers, useInviteMember, useUpdateMemberRole, useRemoveMember } from "@/hooks/use-members";
 import { Button } from "@/components/ui/button";
@@ -40,16 +42,32 @@ export default function MembersPage() {
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleInvite() {
     const trimmed = email.trim();
     if (!trimmed) return;
+    setInviteLink(null);
     try {
       await invite.mutateAsync({ email: trimmed, role });
       setEmail("");
-    } catch {
-      /* 错误由 toast 处理 */
+    } catch (err) {
+      // 未注册邮箱：给出去注册即入队的邀请链接（其他错误由全局 toast 处理）
+      if (err instanceof ApiError && err.code === 40001 && err.message.includes("尚未注册")) {
+        setInviteLink(
+          `${window.location.origin}/register?invite=${teamId}&email=${encodeURIComponent(trimmed)}`
+        );
+        setCopied(false);
+      }
     }
+  }
+
+  async function copyInviteLink() {
+    if (!inviteLink) return;
+    await navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    toast.success("邀请链接已复制，发给对方即可完成注册入队");
   }
 
   return (
@@ -88,6 +106,24 @@ export default function MembersPage() {
           <Button onClick={handleInvite} disabled={invite.isPending || !email.trim()}>
             <UserPlus size={16} strokeWidth={1.5} />
             邀请
+          </Button>
+        </div>
+      ) : null}
+
+      {isAdmin && inviteLink ? (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-primary-50 p-3 text-sm">
+          <Link2 size={16} strokeWidth={1.5} className="shrink-0 text-primary-600" />
+          <span className="text-fg">该邮箱尚未注册，把邀请链接发给 TA，注册后自动加入团队：</span>
+          <code className="min-w-0 flex-1 truncate rounded bg-surface px-2 py-1 text-xs text-meta">
+            {inviteLink}
+          </code>
+          <Button variant="outline" size="sm" onClick={copyInviteLink}>
+            {copied ? (
+              <Check size={16} strokeWidth={1.5} />
+            ) : (
+              <Copy size={16} strokeWidth={1.5} />
+            )}
+            复制链接
           </Button>
         </div>
       ) : null}

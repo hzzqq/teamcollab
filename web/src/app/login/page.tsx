@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { AuthForm } from "@/components/auth/auth-form";
 import { Logo } from "@/components/shell/logo";
@@ -14,7 +15,9 @@ export default function LoginPage() {
           <p className="text-sm text-muted">登录以查看你的任务与团队动态</p>
         </div>
         <div className="rounded-lg border border-border bg-surface p-6 shadow-ring">
-          <AuthForm mode="login" />
+          <Suspense fallback={null}>
+            <AuthForm mode="login" />
+          </Suspense>
           <p className="mt-4 text-center text-xs text-muted">
             还没有账户？{" "}
             <a href="/register" className="text-primary-600 hover:underline">

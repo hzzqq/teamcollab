@@ -95,3 +95,58 @@ def test_me_unauthorized(client):
     resp = client.get("/api/v1/me")
     assert resp.status_code == 401
     assert resp.json()["code"] == 40101
+
+
+def test_register_with_invite_joins_team(client):
+    """邀请注册：注册成功后自动以 member 角色加入邀请团队（不另建默认团队）。"""
+    # 邀请方（owner）先注册，拿到团队 id
+    owner = register_user(client, email="inviter@test-invite.com", display_name="邀请人")
+    team_id = owner["team"]["id"]
+
+    email = "invitee@test-invite.com"
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "pass1234",
+            "display_name": "被邀请人",
+            "invite_team_id": team_id,
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["team"]["id"] == team_id
+    assert data["role"] == "member"
+
+    # 登录后默认落在邀请团队
+    login = client.post(
+        "/api/v1/auth/login", data={"username": email, "password": "pass1234"}
+    )
+    assert login.status_code == 200
+    assert login.json()["data"]["team"]["id"] == team_id
+    assert login.json()["data"]["role"] == "member"
+
+    # 成员列表可见
+    members = client.get(
+        f"/api/v1/teams/{team_id}/members", headers=owner["headers"]
+    )
+    assert members.status_code == 200
+    user_ids = [m["user"]["id"] for m in members.json()["data"]]
+    assert data["user"]["id"] in user_ids
+
+
+def test_register_with_invalid_invite_falls_back(client):
+    """邀请链接失效（团队不存在）→ 回退默认注册流程（自建团队 owner）。"""
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "fallback@test-invite.com",
+            "password": "pass1234",
+            "display_name": "回退用户",
+            "invite_team_id": "00000000-0000-0000-0000-000000000000",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["team"]["name"] == "回退用户 的团队"
+    assert data["role"] == "owner"

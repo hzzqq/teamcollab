@@ -29,6 +29,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=8, max_length=72)
     display_name: str = Field(min_length=1, max_length=100)
+    # 邀请注册：携带邀请方团队 id，注册成功后自动以 member 角色入队
+    invite_team_id: uuid.UUID | None = None
 
     @field_validator("email")
     @classmethod

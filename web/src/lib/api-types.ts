@@ -164,6 +164,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   display_name: string;
+  /** 邀请注册：邀请方团队 id，注册成功后自动入队 */
+  invite_team_id?: string;
 }
 
 export interface LoginRequest {

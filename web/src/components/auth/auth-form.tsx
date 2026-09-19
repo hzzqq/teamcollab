@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff, Loader2, UserPlus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const searchParams = useSearchParams();
+  const inviteTeamId = searchParams.get("invite") ?? "";
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -44,7 +46,12 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       if (mode === "login") {
         await api.login(email.trim(), password);
       } else {
-        await api.register({ email: email.trim(), password, display_name: displayName.trim() });
+        await api.register({
+          email: email.trim(),
+          password,
+          display_name: displayName.trim(),
+          ...(inviteTeamId ? { invite_team_id: inviteTeamId } : {}),
+        });
       }
       router.replace("/me/tasks");
       router.refresh();
@@ -64,6 +71,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
       <ErrorBanner message={error} />
+
+      {mode === "register" && inviteTeamId ? (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-primary-50 px-3 py-2 text-xs text-fg">
+          <UserPlus size={16} strokeWidth={1.5} className="shrink-0 text-primary-600" />
+          你收到团队邀请，注册后将自动加入该团队
+        </div>
+      ) : null}
 
       {mode === "register" ? (
         <div className="flex flex-col gap-1.5">

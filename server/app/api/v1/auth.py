@@ -18,7 +18,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=AuthResponse, status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    data = auth_service.register(db, payload.email, payload.password, payload.display_name)
+    data = auth_service.register(
+        db, payload.email, payload.password, payload.display_name,
+        invite_team_id=payload.invite_team_id,
+    )
     return {"code": 0, "data": data, "message": ""}
 
 

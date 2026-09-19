@@ -1,6 +1,7 @@
 """通知数据访问。"""
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -62,6 +63,22 @@ class NotificationRepo:
                 Notification.user_id == user_id,
                 Notification.type == "task_due_soon",
                 Notification.is_read.is_(False),
+                Notification.payload["task_id"].astext == str(task_id),
+            )
+            .limit(1)
+        )
+        return row is not None
+
+    def exists_recent_due_soon(
+        self, db: Session, user_id: uuid.UUID, task_id: uuid.UUID, since: datetime
+    ) -> bool:
+        """调度器去重：窗口内已提醒过（无论已读未读）则跳过，防止已读后每轮重发。"""
+        row = db.scalar(
+            select(Notification.id)
+            .where(
+                Notification.user_id == user_id,
+                Notification.type == "task_due_soon",
+                Notification.created_at >= since,
                 Notification.payload["task_id"].astext == str(task_id),
             )
             .limit(1)

@@ -17,15 +17,30 @@ from app.repositories.task_repo import task_repo
 
 
 class DueSoonService:
-    def check(self, db: Session, user_id: uuid.UUID) -> list[Notification]:
-        """扫描 assignee=user、due ∈ [now-5min, now+24h]、未完成的任务，生成未消费的提醒。"""
+    def check(
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        *,
+        resurface_since: datetime | None = None,
+    ) -> list[Notification]:
+        """扫描 assignee=user、due ∈ [now-5min, now+24h]、未完成的任务，生成未消费的提醒。
+
+        去重二态：
+        - resurface_since=None（登录惰性检查）：同 task 未读已存在则跳过（已读后可重触发）；
+        - resurface_since=时刻（后台调度器）：该时刻之后已提醒过（无论已读未读）则跳过，
+          防止调度器在用户每次标记已读后再次重发。
+        """
         now = datetime.now(UTC)
         start = now - timedelta(minutes=5)
         end = now + timedelta(hours=24)
         tasks = task_repo.list_due_soon(db, user_id, start, end)
         created: list[Notification] = []
         for task in tasks:
-            if notification_repo.exists_unread_due_soon(db, user_id, task.id):
+            if resurface_since is not None:
+                if notification_repo.exists_recent_due_soon(db, user_id, task.id, resurface_since):
+                    continue
+            elif notification_repo.exists_unread_due_soon(db, user_id, task.id):
                 continue
             n = notification_repo.create(
                 db,

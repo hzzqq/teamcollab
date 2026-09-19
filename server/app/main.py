@@ -1,6 +1,7 @@
-"""应用入口：只装配（中间件 + 路由 + 异常处理器），零业务逻辑。"""
+"""应用入口：只装配（中间件 + 路由 + 异常处理器 + lifespan 后台任务），零业务逻辑。"""
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +12,32 @@ from app.api.v1 import api_router
 from app.core.config import get_settings
 from app.core.errors import too_many_requests
 from app.core.rate_limit import RateLimitExceeded, rate_limiter
+from app.core.scheduler import due_soon_scheduler
+from app.realtime.broker import broker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("app")
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, version="1.0.0", docs_url="/docs", openapi_url="/openapi.json")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await broker.start()
+    due_soon_scheduler.start()
+    logger.info("应用启动完成（broker=%s）", type(broker).__name__)
+    yield
+    await due_soon_scheduler.stop()
+    await broker.stop()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version="1.0.0",
+    docs_url="/docs",
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,

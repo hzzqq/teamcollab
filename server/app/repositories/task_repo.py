@@ -186,5 +186,23 @@ class TaskRepo:
             )
         )
 
+    def list_due_soon_assignees(
+        self, db: Session, start: datetime, end: datetime
+    ) -> list[uuid.UUID]:
+        """调度器用：窗口内有临近到期任务的全部 assignee（去重）。"""
+        return list(
+            db.scalars(
+                select(Task.assignee_id)
+                .where(
+                    Task.assignee_id.is_not(None),
+                    Task.due_date.is_not(None),
+                    Task.due_date >= start.date(),
+                    Task.due_date <= end.date(),
+                    Task.status != "done",
+                )
+                .distinct()
+            )
+        )
+
 
 task_repo = TaskRepo()

@@ -28,7 +28,7 @@ docker-compose.yml  # PostgreSQL 17（pgvector 镜像）
 
 ```bash
 # 1. 数据库（二选一）
-docker compose up -d            # 有 Docker：官方路径
+docker compose up -d            # 有 Docker：官方路径（含 PostgreSQL + Redis）
 .pgtmp/pgsql/bin/pg_ctl -D .pgtmp/data -l .pgtmp/pg.log start   # 无 Docker：本地实例
 
 # 2. 后端（依赖 server/.venv，已建好）
@@ -57,6 +57,11 @@ cd server && .venv/Scripts/python.exe -m scripts.seed
 ```
 
 > 注：`.pgtmp` 自带 PostgreSQL 17 实例，无需 Docker 也能完整跑通前后端。
+
+## 部署形态（SSE 多实例）
+
+- 单实例（默认）：无需 Redis，SSE 走进程内 broker；到期提醒由内置后台调度器每 5 分钟扫描（`SCHEDULER_ENABLED=false` 可关闭）。
+- 多实例：`docker compose up -d redis`，后端配置 `REDIS_URL=redis://localhost:6379/0`，SSE 经 Redis pub/sub 跨实例广播；发布失败降级为日志（通知已落库不丢），订阅断开自动重连。
 
 ## 验证状态（2026-08-06）
 

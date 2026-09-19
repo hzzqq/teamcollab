@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     rate_limit_auth_per_minute: int = 10
     rate_limit_general_per_minute: int = 120
 
+    # 后台调度器（定时到期提醒）
+    scheduler_enabled: bool = True
+    scheduler_due_soon_interval_seconds: int = 300
+    # 调度器重提醒窗口：同任务在该窗口内已提醒过（无论已读未读）则跳过
+    due_soon_resurface_hours: int = 12
+
+    # 实时（SSE broker）：空 = 进程内单实例模式；配置后启用 Redis pub/sub 多实例
+    redis_url: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

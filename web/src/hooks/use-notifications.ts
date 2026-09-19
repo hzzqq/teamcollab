@@ -39,6 +39,10 @@ export function useNotificationStream() {
     (event: MessageEvent) => {
       try {
         const notif = JSON.parse(event.data) as NotificationItem;
+        // SSE 流同时承载临时 board_update 事件（无 id/created_at），只接收已落库通知
+        if (!notif || typeof notif !== "object" || !notif.id || !notif.type || !notif.created_at) {
+          return;
+        }
         qc.setQueryData<ReturnType<typeof api.notifications> extends Promise<infer T> ? T : never>(
           notificationsQueryKey(),
           (old) => {
@@ -65,7 +69,8 @@ export function useNotificationStream() {
       const es = new EventSource(url);
       esRef.current = es;
       es.onopen = () => setConnected(true);
-      es.onmessage = onEvent;
+      // 服务端发送的是命名事件（event: notification），onmessage 只收匿名事件
+      es.addEventListener("notification", onEvent as EventListener);
       es.onerror = () => {
         setConnected(false);
         // EventSource 自动重连

@@ -16,5 +16,17 @@ services:
       timeout: 5s
       retries: 10
 
+  # SSE 多实例模式（uvicorn 起多个进程时必配）：REDIS_URL=redis://localhost:6379/0
+  redis:
+    image: redis:7-alpine
+    container_name: collab-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   collab_pgdata:

@@ -35,10 +35,14 @@ class CommentService:
         task = task_repo.get_by_id(db, task_id)
         if task is None or task.board.team_id != team_id:
             raise not_found("任务不存在")
-        comment = comment_repo.create(db, task_id, actor.id, content)
-        db.flush()
 
         mentions = self._detect_mentions(db, team_id, content, exclude_id=actor.id)
+        # JSONB 列以字符串形式落库（psycopg json.dumps 不支持 UUID 对象）
+        comment = comment_repo.create(
+            db, task_id, actor.id, content, mentions=[str(m) for m in mentions]
+        )
+        db.flush()
+
         notifications: list = []
         for uid in mentions:
             notifications.append(

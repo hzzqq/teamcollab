@@ -41,6 +41,39 @@ def test_comment_mention_notifies(client, team_with_members):
     assert "comment_added" in types
 
 
+def test_comment_list_returns_persisted_mentions(client, team_with_members):
+    """列表接口 mentions 从 DB 落库字段读取，不再写死空数组。"""
+    t = team_with_members
+    member = t["member"]
+
+    # 带 @提及 的评论 → 列表返回该用户 id
+    resp = client.post(
+        f"/api/v1/tasks/{t['task']['id']}/comments",
+        json={"content": f"请 @{member['display_name']} 跟进"},
+        headers=t["owner"]["headers"],
+    )
+    assert resp.status_code == 201
+
+    resp = client.get(f"/api/v1/tasks/{t['task']['id']}/comments", headers=t["owner"]["headers"])
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert any(member["user"]["id"] in c["mentions"] for c in items)
+
+    # 无提及的评论 → mentions 为空数组
+    resp = client.post(
+        f"/api/v1/tasks/{t['task']['id']}/comments",
+        json={"content": "没有提及任何人"},
+        headers=t["owner"]["headers"],
+    )
+    assert resp.status_code == 201
+
+    resp = client.get(f"/api/v1/tasks/{t['task']['id']}/comments", headers=t["owner"]["headers"])
+    items = resp.json()["data"]["items"]
+    latest = items[-1]
+    assert latest["content"] == "没有提及任何人"
+    assert latest["mentions"] == []
+
+
 def test_comment_mention_by_email_prefix(client, team_with_members):
     t = team_with_members
     member = t["member"]

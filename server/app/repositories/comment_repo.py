@@ -27,8 +27,17 @@ class CommentRepo:
         )
         return items, total
 
-    def create(self, db: Session, task_id: uuid.UUID, author_id: uuid.UUID, content: str) -> TaskComment:
-        comment = TaskComment(task_id=task_id, author_id=author_id, content=content)
+    def create(
+        self,
+        db: Session,
+        task_id: uuid.UUID,
+        author_id: uuid.UUID,
+        content: str,
+        mentions: list[uuid.UUID] | None = None,
+    ) -> TaskComment:
+        comment = TaskComment(
+            task_id=task_id, author_id=author_id, content=content, mentions=mentions or []
+        )
         db.add(comment)
         return comment
 

@@ -37,7 +37,7 @@ def list_comments(
                 "task_id": c.task_id,
                 "author": {"id": c.author.id, "display_name": c.author.display_name},
                 "content": c.content,
-                "mentions": [],
+                "mentions": list(c.mentions or []),
                 "created_at": c.created_at,
             }
         )

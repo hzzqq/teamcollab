@@ -14,7 +14,9 @@ from sqlalchemy import (
     String,
     Uuid,
     func,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -40,6 +42,10 @@ class TaskComment(UUIDPkMixin, Base):
         Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     content: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # 被 @ 提及的用户 id 列表（创建时检测落库；列表接口直接读此字段）
+    mentions: Mapped[list[uuid.UUID]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

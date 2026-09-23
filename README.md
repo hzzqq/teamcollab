@@ -11,8 +11,9 @@
 | 前端 | Next.js 15.5.22 (App Router) + React 19.2 + Tailwind 4.1 + shadcn/ui + lucide-react（P0 唯一图标库）+ react-query + dnd-kit |
 | 后端 | FastAPI 0.140 + SQLAlchemy 2.0 + Alembic + PyJWT/bcrypt（禁 python-jose/passlib） |
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
+| 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest 56 用例全绿（含 RBAC/多租户/错误流）；前端 tsc + next build 全过 |
+| 测试 | 后端 pytest 94 用例全绿（RBAC/多租户/错误流/调度器/broker/限流）；前端 tsc + next build 全过 |
 
 ## 目录
 
@@ -52,6 +53,9 @@ python start_dev.py
 # 端到端可用性验证（需后端在 :8000）：自注册全新账号，覆盖注册/看板/任务/评论/拖拽/RBAC/SSE/CORS
 cd server && .venv/Scripts/python.exe scripts/e2e_smoke.py
 
+# 性能冒烟（需后端放开限流启动）：Spec §10 API p95 < 500ms 验收证据
+cd server && .venv/Scripts/python.exe scripts/perf_smoke.py
+
 # 填充演示数据（pm@example.com / pass1234，团队“Demo 产品团队”），幂等可重复
 cd server && .venv/Scripts/python.exe -m scripts.seed
 ```
@@ -63,11 +67,13 @@ cd server && .venv/Scripts/python.exe -m scripts.seed
 - 单实例（默认）：无需 Redis，SSE 走进程内 broker；到期提醒由内置后台调度器每 5 分钟扫描（`SCHEDULER_ENABLED=false` 可关闭）。
 - 多实例：`docker compose up -d redis`，后端配置 `REDIS_URL=redis://localhost:6379/0`，SSE 经 Redis pub/sub 跨实例广播（发布失败降级为日志，通知已落库不丢），限流计数同样经 Redis 全局共享（登录暴力破解防护不随实例数稀释；Redis 故障时 fail-open 放行），到期提醒扫描由 PG advisory lock 互斥。订阅断开自动重连。
 
-## 验证状态（2026-08-06）
+## 验证状态（2026-09-23）
 
-- 后端：56 pytest 全绿（auth/teams/tasks/rbac/boards/notifications）
-- 前端：tsc 0 错误、next build 8 路由全生成、SWC 二进制已修复（重装 15.5.22）
-- 联调：注册/登录/通知/SSE connected 实测通过
+- 后端：pytest 94 全绿（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit）
+- API e2e 冒烟：22/22（`scripts/e2e_smoke.py`，真实起服，覆盖注册/看板/任务/评论/拖拽/RBAC/SSE/CORS/到期提醒）
+- 性能冒烟：核心端点 p95 全部 < 500ms（最重读路径 281.9ms，`scripts/perf_smoke.py`，Spec §10 阈值）
+- 前端：tsc 0 错误、next build 8 路由全生成；验收主线浏览器 E2E 15/15（`.pgtmp/pw/mainline-e2e.js`：注册→邀请链接→建板→分配→SSE 实时通知→状态更新→全局视图）
+- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + pytest + e2e；frontend：npm ci + tsc + build）
 - P0 门禁：全代码 emoji 零容忍、无紫粉渐变、图标 lucide 唯一
 
 ## 已修复的关键缺陷（本次收尾）

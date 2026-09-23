@@ -61,7 +61,7 @@ cd server && .venv/Scripts/python.exe -m scripts.seed
 ## 部署形态（SSE 多实例）
 
 - 单实例（默认）：无需 Redis，SSE 走进程内 broker；到期提醒由内置后台调度器每 5 分钟扫描（`SCHEDULER_ENABLED=false` 可关闭）。
-- 多实例：`docker compose up -d redis`，后端配置 `REDIS_URL=redis://localhost:6379/0`，SSE 经 Redis pub/sub 跨实例广播；发布失败降级为日志（通知已落库不丢），订阅断开自动重连。
+- 多实例：`docker compose up -d redis`，后端配置 `REDIS_URL=redis://localhost:6379/0`，SSE 经 Redis pub/sub 跨实例广播（发布失败降级为日志，通知已落库不丢），限流计数同样经 Redis 全局共享（登录暴力破解防护不随实例数稀释；Redis 故障时 fail-open 放行），到期提醒扫描由 PG advisory lock 互斥。订阅断开自动重连。
 
 ## 验证状态（2026-08-06）
 

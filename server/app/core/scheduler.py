@@ -11,6 +11,8 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import text
+
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.repositories.task_repo import task_repo
@@ -19,9 +21,16 @@ from app.services.notification_service import notification_service
 
 logger = logging.getLogger("app.core.scheduler")
 
+# 多实例互斥锁键（任意固定的应用级 bigint；事务级 advisory lock，提交自动释放）
+_DUE_SOON_SCAN_LOCK_KEY = 837401
+
 
 def scan_once() -> int:
-    """同步执行一轮到期提醒扫描，返回本轮新建通知数（独立会话、自行提交）。"""
+    """同步执行一轮到期提醒扫描，返回本轮新建通知数（独立会话、自行提交）。
+
+    多实例部署时每个实例都会运行调度器；事务级 advisory lock 保证同一时刻
+    只有一个实例在扫描，消除「先查后插」竞态导致的重复提醒。
+    """
     settings = get_settings()
     now = datetime.now(UTC)
     start = now - timedelta(minutes=5)
@@ -29,12 +38,18 @@ def scan_once() -> int:
     resurface_since = now - timedelta(hours=settings.due_soon_resurface_hours)
     created: list = []
     with SessionLocal() as db:
+        got_lock = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": _DUE_SOON_SCAN_LOCK_KEY}
+        ).scalar()
+        if not got_lock:
+            logger.debug("本轮到期提醒扫描被其他实例持有锁，跳过")
+            return 0
         assignee_ids = task_repo.list_due_soon_assignees(db, start, end)
         for uid in assignee_ids:
             created.extend(
                 due_soon_service.check(db, uid, resurface_since=resurface_since)
             )
-        db.commit()
+        db.commit()  # 事务结束，advisory lock 自动释放
     for n in created:
         notification_service.publish(n)
     return len(created)

@@ -144,3 +144,22 @@ def test_scheduler_ignores_far_future(client):
 
     scan_once()
     assert _unread_due_soon(client, member["headers"]) == []
+
+
+def test_scheduler_scan_skipped_when_lock_held(client):
+    """多实例互斥：advisory lock 被其他实例持有时，本轮扫描直接跳过（不重复提醒）。"""
+    from app.core.scheduler import _DUE_SOON_SCAN_LOCK_KEY, scan_once
+
+    owner, member, _ = _setup_due_task(client)
+    _backdate_due_soon(member["user"]["id"], hours=13)
+    client.post("/api/v1/notifications/read-all", headers=member["headers"])
+
+    # 模拟另一个实例持有锁（连接级事务锁，with 结束才释放）
+    with engine.connect() as conn:
+        conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _DUE_SOON_SCAN_LOCK_KEY})
+        assert scan_once() == 0
+        assert _unread_due_soon(client, member["headers"]) == []
+
+    # 锁释放后扫描恢复正常
+    assert scan_once() >= 1
+    assert len(_unread_due_soon(client, member["headers"])) == 1

@@ -44,9 +44,9 @@ jobs:
       # 注意：REDIS_URL 只注入 e2e 步骤——pytest 校验的是进程内路由契约（内存 broker），
       # 多实例模式由真实起服的 e2e 冒烟端到端验证（lifespan 订阅任务只有那时才运行）
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -84,9 +84,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

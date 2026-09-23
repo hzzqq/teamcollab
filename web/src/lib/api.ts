@@ -50,8 +50,10 @@ export const ERROR_MESSAGES: Record<number, string> = {
 export const API_MODE: "mock" | "real" =
   (process.env.NEXT_PUBLIC_API_MODE as "mock" | "real" | undefined) || "real";
 
+// API 基址：显式 NEXT_PUBLIC_API_BASE > NEXT_PUBLIC_API_SAME_ORIGIN=1（同源，Docker/nginx 部署用）> 本地直连
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE ||
+  (process.env.NEXT_PUBLIC_API_SAME_ORIGIN === "1" ? "" : "http://localhost:8000");
 
 /* ---------------- 真实请求层 ---------------- */
 

@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Docker 镜像用 standalone 产物（.next/standalone 自带精简 node_modules）
+  output: "standalone",
   // FastAPI 默认 http://localhost:8000；通过 NEXT_PUBLIC_API_BASE 覆盖
   // 开发代理：避免 CORS 干扰
   async rewrites() {

@@ -1,0 +1,105 @@
+# TeamCollab 生产部署（全栈一键拉起）
+#
+#   JWT_SECRET=请改成强随机值 docker compose -f docker-compose.prod.yml up -d --build
+#
+# 拓扑：nginx(:80) → [web(Next standalone), api-1 + api-2(FastAPI 双实例)]
+#       api×2 → PostgreSQL(pgvector) + Redis（REDIS_URL 必配 = 多实例模式：
+#       SSE 广播 / 限流共享计数 / 调度器互斥 三件套生效）
+# 迁移：migrate 一次性服务先跑 alembic upgrade head，api 依赖其成功后才启动
+#
+# ⚠️ 本仓库开发环境无 Docker daemon：本文件经静态校验，首次上机请按
+#    README「生产部署」核对运行时行为。
+services:
+  migrate:
+    build: ./server
+    image: teamcollab-api:latest
+    command: python -m alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+psycopg://collab:collab@postgres:5432/collab
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api-1:
+    image: teamcollab-api:latest
+    build: ./server
+    environment: &api_env
+      DATABASE_URL: postgresql+psycopg://collab:collab@postgres:5432/collab
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
+      CORS_ORIGINS: "http://localhost,http://127.0.0.1"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  api-2:
+    image: teamcollab-api:latest
+    build: ./server
+    environment: *api_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_MODE: real
+        NEXT_PUBLIC_API_SAME_ORIGIN: "1"
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+      - api-1
+      - api-2
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: collab
+      POSTGRES_PASSWORD: collab
+      POSTGRES_DB: collab
+    volumes:
+      - collab_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collab -d collab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  collab_pgdata:

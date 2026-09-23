@@ -62,6 +62,19 @@ cd server && .venv/Scripts/python.exe -m scripts.seed
 
 > 注：`.pgtmp` 自带 PostgreSQL 17 实例，无需 Docker 也能完整跑通前后端。
 
+## 生产部署（Docker 全栈一键拉起）
+
+```bash
+JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --build
+# 访问 http://localhost（nginx :80 → web + api 双实例）
+```
+
+- 拓扑：nginx → [web(Next standalone), api-1 + api-2(FastAPI)] → PostgreSQL(pgvector) + Redis；迁移由一次性 `migrate` 服务先行执行，api 依赖其成功后才启动
+- api 双实例 + `REDIS_URL` 必配 → 多实例三件套真实生效（SSE 广播 / 限流共享计数 / 调度器 advisory lock 互斥）
+- SSE 经 nginx `proxy_buffering off` + 3600s 读超时透传，长连接不断流
+- 前端以 `NEXT_PUBLIC_API_SAME_ORIGIN=1` 构建：浏览器同源请求 `/api/*`，无跨域，`deploy/nginx.conf` 负责反代路由
+- ⚠️ 开发环境无 Docker daemon：compose/Dockerfile 经静态校验，首次上机请核对运行时行为
+
 ## 部署形态（SSE 多实例）
 
 - 单实例（默认）：无需 Redis，SSE 走进程内 broker；到期提醒由内置后台调度器每 5 分钟扫描（`SCHEDULER_ENABLED=false` 可关闭）。

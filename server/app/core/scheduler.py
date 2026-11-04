@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.repositories.task_repo import task_repo
-from app.services.due_soon_service import due_soon_service
+from app.services.due_soon_service import due_soon_service, due_soon_window
 from app.services.notification_service import notification_service
 
 logger = logging.getLogger("app.core.scheduler")
@@ -32,10 +32,8 @@ def scan_once() -> int:
     只有一个实例在扫描，消除「先查后插」竞态导致的重复提醒。
     """
     settings = get_settings()
-    now = datetime.now(UTC)
-    start = now - timedelta(minutes=5)
-    end = now + timedelta(hours=24)
-    resurface_since = now - timedelta(hours=settings.due_soon_resurface_hours)
+    start, end = due_soon_window()
+    resurface_since = datetime.now(UTC) - timedelta(hours=settings.due_soon_resurface_hours)
     created: list = []
     with SessionLocal() as db:
         got_lock = db.execute(

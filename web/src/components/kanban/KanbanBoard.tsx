@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, CalendarClock } from "lucide-react";
 import { useBoard, useMoveTask, useCreateTask, useCreateColumn } from "@/hooks/use-board";
 import { useMe, canWrite } from "@/hooks/use-me";
+import { computeMoveTarget } from "@/lib/drag-position";
 import { dueState, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,10 +59,6 @@ export function KanbanBoard({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  function findColumnOfTask(taskId: string, columns: BoardColumnWithTasks[]): BoardColumnWithTasks | undefined {
-    return columns.find((c) => c.tasks.some((t) => t.id === taskId));
-  }
-
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || !board) return;
@@ -69,20 +66,16 @@ export function KanbanBoard({
     const overId = String(over.id);
     if (activeId === overId) return;
 
-    const sourceCol = findColumnOfTask(activeId, board.columns);
-    if (!sourceCol) return;
+    // 落位参数由纯函数统一计算（前后端契约的唯一真相源，见 lib/drag-position.ts）
+    const target = computeMoveTarget(board.columns, activeId, overId);
+    if (!target) return;
 
-    const targetCol =
-      board.columns.find((c) => c.id === overId) || findColumnOfTask(overId, board.columns);
-    if (!targetCol) return;
-
-    const overIndex = targetCol.tasks.findIndex((t) => t.id === overId);
-    const position = overIndex >= 0 ? overIndex : targetCol.tasks.length;
-
+    // 契约：路径 columnId 必须是【目标列】（openapi-v2 position 接口：columnId=目标列，
+    // body.target_column_id 与路径一致做冗余校验）。传源列会被后端 400 拒绝。
     moveTask.mutate({
-      columnId: sourceCol.id,
+      columnId: target.columnId,
       taskId: activeId,
-      req: { target_column_id: targetCol.id, position },
+      req: { target_column_id: target.columnId, position: target.position },
     });
   }
 

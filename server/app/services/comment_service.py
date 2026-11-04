@@ -51,13 +51,14 @@ class CommentService:
                     team_id,
                     uid,
                     "comment_added",
-                    {
-                        "task_id": str(task.id),
-                        "task_title": task.title,
-                        "comment_id": str(comment.id),
-                        "comment_snippet": content[:80],
-                        "actor_id": str(actor.id),
-                    },
+                {
+                    "task_id": str(task.id),
+                    "task_title": task.title,
+                    "board_id": str(task.board_id),
+                    "comment_id": str(comment.id),
+                    "comment_snippet": content[:80],
+                    "actor_id": str(actor.id),
+                },
                 )
             )
         db.commit()

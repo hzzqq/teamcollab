@@ -50,14 +50,32 @@ export function timeAgo(iso: string): string {
 
 export type DueState = "overdue" | "soon" | "normal" | "none";
 
-/** 截止状态：逾期 / 24h 内（未完成）/ 正常 / 无截止 */
+/** 截止状态：逾期 / 24h 内（未完成）/ 正常 / 无截止
+ *
+ * 时区要点：due_date 是「本地自然日」（YYYY-MM-DD，无时区）。
+ * parseDate 解析为本地零点，若直接与 Date.now() 比较，当天到期的任务
+ * 会被判为 overdue（00:00 < 当前时刻），且「soon」分支对今天永不可达。
+ * 正确做法：与「当天结束时刻」比较。
+ */
 export function dueState(dueDate: string | null, status?: TaskStatusLike): DueState {
   if (!dueDate) return "none";
-  const due = parseDate(dueDate).getTime();
-  const now = Date.now();
   if (status === "done") return "normal";
-  if (due < now) return "overdue";
-  if (due - now <= DAY_MS) return "soon";
+
+  const due = parseDate(dueDate);
+  // 当天 23:59:59.999 结束时刻；早于它说明还没到期
+  const endOfDueDay = new Date(
+    due.getFullYear(),
+    due.getMonth(),
+    due.getDate(),
+    23,
+    59,
+    59,
+    999,
+  ).getTime();
+  const now = Date.now();
+
+  if (now > endOfDueDay) return "overdue";
+  if (endOfDueDay - now <= DAY_MS) return "soon";
   return "normal";
 }
 

@@ -3,7 +3,8 @@
    - 统一响应 { code, data, message } 解包：成功返回 data，失败抛 ApiError
    - 错误码映射 40001/40101/40301/40401/40901/42901/50000
    - token 管理：Bearer 附加、401 单飞刷新、刷新失败清 token 跳登录
-   - 模式开关：NEXT_PUBLIC_API_MODE = mock(默认) | real
+   - 模式开关：NEXT_PUBLIC_API_MODE = real（默认）| mock
+     mock 仅作离线演示 fallback；两者行为必须一致（mock/real 漂移曾是 P0 事故根因）
    ============================================================ */
 import { clearTokens, getAccessToken, getRefreshToken, setAccessToken, setTokens } from "./auth";
 import { mockApi } from "./mock/api";
@@ -18,8 +19,8 @@ import type {
   InviteMemberRequest,
   Member,
   MoveTaskRequest,
-  NotificationItem,
   Paginated,
+  PaginatedNotifications,
   RefreshResponse,
   RegisterRequest,
   Role,
@@ -116,8 +117,10 @@ async function rawRequest<T>(
     throw new ApiError(0, "网络连接失败，请检查网络后重试");
   }
 
-  // 401 且未重试过 → 单飞刷新后重试一次
-  if (res.status === 401 && !opts.retried) {
+  // 401 且未重试过 → 单飞刷新后重试一次。
+  // auth:false 的请求（登录/注册）不参与刷新：它们的 401 是「凭证错误」而非
+  // 「token 过期」，若走刷新分支会把用户已有的有效会话也一并清掉。
+  if (res.status === 401 && !opts.retried && opts.auth !== false) {
     const ok = await refreshAccessToken();
     if (ok) return rawRequest(path, method, { ...opts, retried: true });
     redirectToLogin();
@@ -143,8 +146,6 @@ async function rawRequest<T>(
 /* ---------------- 统一 API 门面（mock / real 双通道） ---------------- */
 
 export const api = {
-  mode: API_MODE,
-
   async register(req: RegisterRequest): Promise<AuthResponse> {
     if (API_MODE === "mock") return unwrap(await mockApi.register(req));
     const data = await rawRequest<AuthResponse>("/api/v1/auth/register", "POST", { body: req, auth: false });
@@ -253,7 +254,7 @@ export const api = {
     return rawRequest(`/api/v1/teams/${teamId}/members/${userId}`, "DELETE");
   },
 
-  async notifications(params: { page?: number; limit?: number } = {}): Promise<Paginated<NotificationItem>> {
+  async notifications(params: { page?: number; limit?: number } = {}): Promise<PaginatedNotifications> {
     if (API_MODE === "mock") return unwrap(await mockApi.notifications(params));
     const qs = new URLSearchParams({ page: String(params.page || 1), limit: String(params.limit || 20) });
     return rawRequest(`/api/v1/notifications?${qs}`, "GET");

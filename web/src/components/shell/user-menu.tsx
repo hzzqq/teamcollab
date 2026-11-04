@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { clearTokens } from "@/lib/auth";
 import { useMe } from "@/hooks/use-me";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,9 +19,13 @@ import {
 
 export function UserMenu() {
   const router = useRouter();
+  const qc = useQueryClient();
   const { data: me } = useMe();
 
   function handleLogout() {
+    // 必须先清 React Query 缓存再清 token：queryKey 不含用户维度，
+    // 不清缓存会让下一位登录者看到上一位用户的 /me、通知、我的任务数据。
+    qc.clear();
     clearTokens();
     router.replace("/login");
     router.refresh();

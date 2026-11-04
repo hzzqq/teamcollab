@@ -24,5 +24,15 @@ class NotificationResponse(ApiResponse[NotificationOut]):
     pass
 
 
-class PaginatedNotifications(ApiResponse[Paginated[NotificationOut]]):
+class PaginatedNotificationsData(Paginated[NotificationOut]):
+    """通知分页 + 未读总数。
+
+    unreadTotal 独立于 items：前端若用 items 过滤未读，只会统计到已加载的
+    limit 条（默认 20），未读数会被严重低估。
+    """
+
+    unreadTotal: int
+
+
+class PaginatedNotifications(ApiResponse[PaginatedNotificationsData]):
     pass

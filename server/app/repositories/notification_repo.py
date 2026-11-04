@@ -46,6 +46,17 @@ class NotificationRepo:
         )
         return items, total
 
+    def count_unread(self, db: Session, user_id: uuid.UUID) -> int:
+        """未读通知总数（不受分页 limit 影响）。"""
+        return (
+            db.scalar(
+                select(func.count())
+                .select_from(Notification)
+                .where(Notification.user_id == user_id, Notification.is_read.is_(False))
+            )
+            or 0
+        )
+
     def mark_all_read(self, db: Session, user_id: uuid.UUID) -> int:
         """把该用户全部未读通知置为已读，返回更新行数。"""
         result = db.execute(

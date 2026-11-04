@@ -11,10 +11,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
-import { useNotifications } from "@/hooks/use-notifications";
-import { useQueryClient } from "@tanstack/react-query";
-import { notificationsQueryKey } from "@/hooks/use-notifications";
-import { api } from "@/lib/api";
+import { useNotifications, useMarkAllRead } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -52,9 +49,10 @@ function notificationText(n: NotificationItem): string {
 
 export function NotificationBell() {
   const router = useRouter();
-  const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useNotifications();
-  const unread = data?.items.filter((n) => !n.is_read).length ?? 0;
+  const markAllReadMutation = useMarkAllRead();
+  // 未读数：优先用服务端 total（仅未读过滤），避免只统计已加载的 20 条
+  const unread = data?.unreadTotal ?? data?.items.filter((n) => !n.is_read).length ?? 0;
 
   function handleOpen(n: NotificationItem) {
     const boardId = String(n.payload?.board_id || "");
@@ -65,18 +63,8 @@ export function NotificationBell() {
   }
 
   function markAllRead() {
-    const previous = data;
-    // 乐观更新：先改缓存，后端落库失败再回滚
-    qc.setQueryData(notificationsQueryKey(), (old: typeof data) => {
-      if (!old) return old;
-      return { ...old, items: old.items.map((n) => ({ ...n, is_read: true })) };
-    });
-    api.markAllRead().catch(() => {
-      if (previous) {
-        qc.setQueryData(notificationsQueryKey(), previous);
-      }
-      qc.invalidateQueries({ queryKey: notificationsQueryKey() });
-    });
+    if (markAllReadMutation.isPending) return;
+    markAllReadMutation.mutate();
   }
 
   return (

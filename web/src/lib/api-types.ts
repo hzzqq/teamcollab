@@ -158,6 +158,11 @@ export interface NotificationItem {
   created_at: string;
 }
 
+/** 通知分页响应（含未读总数，独立于分页 limit） */
+export interface PaginatedNotifications extends Paginated<NotificationItem> {
+  unreadTotal: number;
+}
+
 /* ---------------- 请求体 ---------------- */
 
 export interface RegisterRequest {

@@ -13,8 +13,8 @@ import type {
   InviteMemberRequest,
   Member,
   MoveTaskRequest,
-  NotificationItem,
   Paginated,
+  PaginatedNotifications,
   RefreshResponse,
   RegisterRequest,
   Role,
@@ -134,7 +134,7 @@ export const mockApi = {
   async boardDetail(boardId: string): Promise<ApiEnvelope<BoardDetail>> {
     const board = db.boards.find((b) => b.id === boardId);
     if (!board) return delay(err(40401, "看板不存在"));
-    return delay(ok({ ...board, columns: taskToColumns(db).map((c) => ({ ...c, board_id: boardId })) }));
+    return delay(ok({ ...board, columns: taskToColumns(db, boardId) }));
   },
 
   async createColumn(boardId: string, name: string): Promise<ApiEnvelope<BoardDetail["columns"][number]>> {
@@ -264,11 +264,13 @@ export const mockApi = {
     return delay(ok({ ok: true }));
   },
 
-  async notifications(params: { page?: number; limit?: number }): Promise<ApiEnvelope<Paginated<NotificationItem>>> {
+  async notifications(params: { page?: number; limit?: number }): Promise<ApiEnvelope<PaginatedNotifications>> {
     const items = db.notifications;
     const page = params.page || 1;
     const limit = params.limit || 20;
-    return delay(ok({ items: items.slice((page - 1) * limit, page * limit), total: items.length, page, limit, hasMore: page * limit < items.length }));
+    // unreadTotal 与后端契约一致：独立于分页的未读总数
+    const unreadTotal = items.filter((n) => !n.is_read).length;
+    return delay(ok({ items: items.slice((page - 1) * limit, page * limit), total: items.length, page, limit, hasMore: page * limit < items.length, unreadTotal }));
   },
 
   async markAllRead(): Promise<ApiEnvelope<{ ok: boolean; updated: number }>> {

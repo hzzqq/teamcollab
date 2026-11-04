@@ -165,8 +165,14 @@ export function seedDb(): MockDb {
   };
 }
 
-export function taskToColumns(db: MockDb): BoardColumnWithTasks[] {
-  return (db.columns["b-1"] || [])
+/**
+ * 取指定看板的列 + 任务（mock 模式）。
+ *
+ * 必须按 boardId 取列 —— 早期实现硬编码 db.columns["b-1"]，
+ * 导致「新建看板」打开后仍显示 b-1 的三列（mock/real 行为漂移）。
+ */
+export function taskToColumns(db: MockDb, boardId: string): BoardColumnWithTasks[] {
+  return (db.columns[boardId] || [])
     .slice()
     .sort((a, b) => a.position - b.position)
     .map((c) => ({

@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, API_MODE } from "@/lib/api";
-import type { NotificationItem } from "@/lib/api-types";
+import { subscribeTokenChange } from "@/lib/auth";
+import { boardQueryKey } from "@/hooks/use-board";
+import type { NotificationItem, PaginatedNotifications } from "@/lib/api-types";
 
 export function notificationsQueryKey() {
   return ["notifications"];
@@ -18,9 +20,33 @@ export function useNotifications() {
   });
 }
 
-export function useUnreadCount() {
-  const { data } = useNotifications();
-  return data?.items.filter((n) => !n.is_read).length ?? 0;
+/** 全部标记已读（乐观更新 + 失败回滚；错误提示由全局 mutation onError 负责） */
+export function useMarkAllRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.markAllRead(),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: notificationsQueryKey() });
+      const previous = qc.getQueryData<PaginatedNotifications>(notificationsQueryKey());
+      qc.setQueryData<PaginatedNotifications>(notificationsQueryKey(), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          unreadTotal: 0,
+          items: old.items.map((n) => ({ ...n, is_read: true })),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(notificationsQueryKey(), context.previous);
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: notificationsQueryKey() });
+    },
+  });
 }
 
 /**
@@ -32,17 +58,44 @@ export function useUnreadCount() {
 export function useNotificationStream() {
   const qc = useQueryClient();
   const [connected, setConnected] = useState(false);
+  const [tokenVersion, setTokenVersion] = useState(0);
   const esRef = useRef<EventSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // token 刷新后必须重建 EventSource：SSE URL 里带 access token，
+  // 旧 token 过期后断线重连会一直 401 → 实时通知永久失效。
+  useEffect(() => {
+    return subscribeTokenChange(() => setTokenVersion((v) => v + 1));
+  }, []);
 
   const onEvent = useCallback(
     (event: MessageEvent) => {
       try {
-        const notif = JSON.parse(event.data) as NotificationItem;
-        // SSE 流同时承载临时 board_update 事件（无 id/created_at），只接收已落库通知
-        if (!notif || typeof notif !== "object" || !notif.id || !notif.type || !notif.created_at) {
+        const parsed = JSON.parse(event.data) as {
+          id?: string;
+          type?: string;
+          created_at?: string;
+          payload?: { board_id?: string };
+        };
+        if (!parsed || typeof parsed !== "object") return;
+
+        // SSE 流同时承载两类事件：
+        // 1) 已落库通知（有 id / type / created_at）
+        // 2) board_update 临时帧（只有 type + payload，无 id/created_at）
+        if (parsed.type === "board_update") {
+          // 看板实时同步：使对应看板查询失效，触发重新拉取
+          const boardId = parsed.payload?.board_id;
+          if (boardId) {
+            qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
+          }
           return;
         }
+
+        // 其余为已落库通知，形状校验通过才写入缓存
+        if (!parsed.id || !parsed.type || !parsed.created_at) {
+          return;
+        }
+        const notif = parsed as unknown as NotificationItem;
         qc.setQueryData<ReturnType<typeof api.notifications> extends Promise<infer T> ? T : never>(
           notificationsQueryKey(),
           (old) => {
@@ -73,7 +126,7 @@ export function useNotificationStream() {
       es.addEventListener("notification", onEvent as EventListener);
       es.onerror = () => {
         setConnected(false);
-        // EventSource 自动重连
+        // EventSource 自动重连（URL 中的 token 已随 tokenVersion 依赖更新）
       };
       return () => {
         es.close();
@@ -91,7 +144,7 @@ export function useNotificationStream() {
       if (timerRef.current) clearInterval(timerRef.current);
       setConnected(false);
     };
-  }, [qc, onEvent]);
+  }, [qc, onEvent, tokenVersion]);
 
   return { connected };
 }

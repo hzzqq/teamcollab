@@ -7,13 +7,29 @@
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification
 from app.repositories.notification_repo import notification_repo
 from app.repositories.task_repo import task_repo
+
+
+def due_soon_window(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """返回到期提醒的扫描窗口 [start, end]。
+
+    时区要点：tasks.due_date 是 **无时区的 date**，语义是「用户的本地自然日」。
+    若用 UTC 计算 now 再取 .date()，在 UTC+8 下会比本地日少算一天 ——
+    本地「明天」的任务会被排除在 24 小时窗口外，导致到期提醒漏发
+    （历史缺陷：test_due_soon_notification_on_create 曾因此失败）。
+
+    因此窗口一律按**本地时区**计算，与前端 date.today() 语义一致。
+    """
+    local_now = (now or datetime.now()).astimezone()
+    start = local_now - timedelta(minutes=5)
+    end = local_now + timedelta(hours=24)
+    return start, end
 
 
 class DueSoonService:
@@ -31,9 +47,7 @@ class DueSoonService:
         - resurface_since=时刻（后台调度器）：该时刻之后已提醒过（无论已读未读）则跳过，
           防止调度器在用户每次标记已读后再次重发。
         """
-        now = datetime.now(UTC)
-        start = now - timedelta(minutes=5)
-        end = now + timedelta(hours=24)
+        start, end = due_soon_window()
         tasks = task_repo.list_due_soon(db, user_id, start, end)
         created: list[Notification] = []
         for task in tasks:
@@ -50,6 +64,7 @@ class DueSoonService:
                 payload={
                     "task_id": str(task.id),
                     "task_title": task.title,
+                    "board_id": str(task.board_id),
                     "due_date": str(task.due_date) if task.due_date else None,
                 },
             )

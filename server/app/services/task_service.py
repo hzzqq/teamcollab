@@ -213,9 +213,20 @@ class TaskService:
 
         from_column_id = task.column_id
         # 批量重排：源列/目标列任务全部重写 position（MVP 规模小，最简正确）
+        # 目标列：排除被拖任务自身后按 position 插入（与前端乐观更新同口径）
         tasks_in_target = [t for t in task_repo.list_by_column(db, column_id) if t.id != task.id]
         pos = max(0, min(position, len(tasks_in_target)))
         tasks_in_target.insert(pos, task)
+
+        # 跨列时源列同样需要重排：移除被拖任务后把剩余任务的 position 压紧，
+        # 否则源列会留下 position 空洞（如 0,2,3），后续按 position 排序会乱序。
+        if from_column_id != column_id:
+            tasks_in_source = [
+                t for t in task_repo.list_by_column(db, from_column_id) if t.id != task.id
+            ]
+            for idx, t in enumerate(tasks_in_source):
+                t.position = idx
+
         task.column_id = column_id
         for idx, t in enumerate(tasks_in_target):
             t.position = idx

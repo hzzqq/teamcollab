@@ -42,9 +42,9 @@ async def _event_stream(user_id: str) -> AsyncGenerator[str, None]:
 
 
 @router.get("/notifications/stream", response_class=StreamingResponse)
-def stream_notifications(user: User = Depends(get_current_user_query)):
+def stream_notifications(user_id: str = Depends(get_current_user_query)):
     return StreamingResponse(
-        _event_stream(str(user.id)),
+        _event_stream(user_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -69,6 +69,8 @@ def list_notifications(
         "page": page,
         "limit": limit,
         "hasMore": page * limit < total,
+        # 未读总数独立于分页：前端用 items 过滤未读会漏掉未加载的条目
+        "unreadTotal": notification_service.count_unread(db, user.id),
     }
     return {"code": 0, "data": data, "message": ""}
 

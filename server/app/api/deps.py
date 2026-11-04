@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from fastapi import Depends, Header, Query
 from sqlalchemy.orm import Session
 
-from app.core.db import get_db
+from app.core.db import SessionLocal, get_db
 from app.core.errors import forbidden, not_found, unauthorized
 from app.core.security import decode_token
 from app.models.board import Board
@@ -49,11 +49,27 @@ def get_current_user(
 
 def get_current_user_query(
     token: str = Query(default="", description="access token（EventSource 无法自定义 Header，走 query）"),
-    db: Session = Depends(get_db),
-) -> User:
+) -> str:
+    """SSE 认证：校验 query token，返回 user_id 字符串。
+
+    刻意不使用 Depends(get_db) —— SSE 是长连接响应，若依赖注入的 DB 会话
+    随响应生命周期存活，每条长连接会独占一个连接池连接（实测 5 条 SSE →
+    pg_stat_activity 连接数 +5），连接池（pool_size+max_overflow=15）会被
+    在线用户数耗尽，导致普通请求阻塞。
+
+    这里用独立短会话完成一次性校验，随即释放；SSE 流本身不需要 DB 连接
+    （事件从 broker 的内存/Redis 队列推送）。
+    """
     if not token:
         raise unauthorized("未提供有效的访问凭证")
-    return _user_from_token(token, db)
+    payload = decode_token(token, expected_type="access")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise unauthorized("凭证无效")
+    with SessionLocal() as db:
+        if user_repo.get_by_id(db, uuid.UUID(user_id)) is None:
+            raise unauthorized("用户不存在或凭证已失效")
+    return user_id
 
 
 def _resolve_context(db: Session, user: User, team_id: uuid.UUID) -> ResourceContext:

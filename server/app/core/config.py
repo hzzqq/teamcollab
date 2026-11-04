@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # 数据库
     database_url: str = "postgresql+psycopg://collab:collab@localhost:5432/collab"
 
-    # JWT（开发默认值，生产必须通过环境变量覆盖）
+    # JWT（开发默认值；生产必须通过环境变量覆盖，见 assert_production_config）
     jwt_secret: str = "dev-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
@@ -41,11 +41,45 @@ class Settings(BaseSettings):
     # 实时（SSE broker）：空 = 进程内单实例模式；配置后启用 Redis pub/sub 多实例
     redis_url: str = ""
 
+    # 数据库连接池（每个 worker 进程独立）
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+
+    # 生产环境标识（compose / 部署时置为 production 以启用配置校验）
+    environment: str = "development"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() in ("production", "prod")
+
+    def assert_production_config(self) -> None:
+        """生产环境配置自检：弱密钥 / 默认密钥时拒绝启动（fail fast）。
+
+        历史风险：docker-compose.prod.yml 用 ${JWT_SECRET:-dev-secret-change-me-in-production}
+        兜底，运维忘记设环境变量就会带着公开的默认密钥上线 —— 任何人都能伪造
+        任意用户的 access token。这里改为启动即失败，把问题暴露在部署阶段。
+        """
+        if not self.is_production:
+            return
+        if self.jwt_secret == "dev-secret-change-me-in-production":
+            raise RuntimeError(
+                "生产环境必须设置 JWT_SECRET 环境变量（当前为开发默认密钥）。"
+                "生成方式：python -c \"import secrets;print(secrets.token_urlsafe(48))\""
+            )
+        if len(self.jwt_secret) < 32:
+            raise RuntimeError(
+                f"JWT_SECRET 长度不足 32 字符（当前 {len(self.jwt_secret)}），"
+                "生产环境要求足够随机且足够长。"
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    settings.assert_production_config()
+    return settings

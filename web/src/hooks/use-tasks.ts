@@ -2,7 +2,6 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { Task } from "@/lib/api-types";
 import { isOverdue } from "@/lib/format";
 
 export interface MyTasksParams {
@@ -33,9 +32,4 @@ export function useMyTasks(params: MyTasksParams) {
       return { ...res, items: sorted };
     },
   });
-}
-
-export function useMyTasksAll(): Task[] | undefined {
-  const { data } = useMyTasks({ page: 1, limit: 100 });
-  return data?.items;
 }

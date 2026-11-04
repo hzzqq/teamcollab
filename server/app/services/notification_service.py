@@ -54,6 +54,10 @@ class NotificationService:
     ) -> tuple[list[Notification], int]:
         return notification_repo.list_by_user(db, user_id, page=page, limit=limit, unread_only=unread_only)
 
+    def count_unread(self, db: Session, user_id: uuid.UUID) -> int:
+        """未读通知总数（独立于分页）。"""
+        return notification_repo.count_unread(db, user_id)
+
     def mark_all_read(self, db: Session, user_id: uuid.UUID) -> int:
         """全部未读置已读，返回更新条数。"""
         updated = notification_repo.mark_all_read(db, user_id)

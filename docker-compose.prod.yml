@@ -27,8 +27,14 @@ services:
     environment: &api_env
       DATABASE_URL: postgresql+psycopg://collab:collab@postgres:5432/collab
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
+      # JWT_SECRET 无默认值：未设置时启动即失败（弱密钥兜底曾导致带默认密钥上线）
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须显式设置，生成：python -c "import secrets;print(secrets.token_urlsafe(48))"}
+      ENVIRONMENT: production
       CORS_ORIGINS: "http://localhost,http://127.0.0.1"
+      # 必须显式信任反代网段：uvicorn 的 forwarded_allow_ips 默认仅 127.0.0.1，
+      # 不设置则 nginx 桥接来的 X-Forwarded-For 被丢弃 → request.client.host
+      # 恒为 nginx 容器 IP → 限流器全站共用一个 key（登录爆破防护形同虚设）。
+      FORWARDED_ALLOW_IPS: "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.1"
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -98,6 +98,12 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      - name: Lint
+        run: npx next lint --dir src
+
+      - name: Unit tests (node:test + 原生 TS 类型剥离)
+        run: npm test
+
       - name: Build
         env:
           # 与本地 .env.production（未入库）等价：生产模式走 real API

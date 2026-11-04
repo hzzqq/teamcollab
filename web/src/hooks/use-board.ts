@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { applyOptimisticMove } from "@/lib/drag-position";
 import type { BoardDetail, CreateTaskRequest, MoveTaskRequest } from "@/lib/api-types";
 
 export function boardQueryKey(boardId: string) {
@@ -96,23 +97,14 @@ export function useMoveTask(boardId: string) {
       if (previous) {
         qc.setQueryData<BoardDetail>(boardQueryKey(boardId), (old) => {
           if (!old) return old;
-          const fromCol = old.columns.find((c) => c.tasks.some((t) => t.id === taskId));
-          const task = fromCol?.tasks.find((t) => t.id === taskId);
-          if (!task || !fromCol) return old;
-          const nextColumns = old.columns.map((col) => {
-            if (col.id === fromCol.id) {
-              return { ...col, tasks: col.tasks.filter((t) => t.id !== taskId) };
-            }
-            if (col.id === req.target_column_id) {
-              const inserted = { ...task, column_id: req.target_column_id };
-              const tasks = [...col.tasks];
-              const pos = Math.max(0, Math.min(req.position, tasks.length));
-              tasks.splice(pos, 0, inserted);
-              return { ...col, tasks };
-            }
-            return col;
-          });
-          return { ...old, columns: nextColumns };
+          // 乐观更新走纯函数（与后端落位口径一致，同列/跨列统一处理）
+          const columns = applyOptimisticMove(
+            old.columns,
+            taskId,
+            req.target_column_id,
+            req.position,
+          );
+          return { ...old, columns };
         });
       }
       return { previous };

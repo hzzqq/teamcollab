@@ -2,28 +2,30 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Inbox, ListChecks, Settings, SquareKanban, Users, type LucideIcon } from "lucide-react";
+import { ListChecks, SquareKanban, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMe, canAdmin } from "@/hooks/use-me";
+import { useMe } from "@/hooks/use-me";
 
 interface TabItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  adminOnly?: boolean;
 }
 
+/**
+ * 已实现的底部导航项（与 Sidebar 的 NAV_ITEMS 保持一致）。
+ * DESIGN.md §4.7 的「收件箱 / 项目 / 设置」当前无对应路由，按边界宪法不建占位页面。
+ */
 const TABS: TabItem[] = [
-  { label: "收件箱", href: "/inbox", icon: Inbox },
   { label: "我的任务", href: "/me/tasks", icon: ListChecks },
   { label: "看板", href: "/boards", icon: SquareKanban },
   { label: "成员", href: "/members", icon: Users },
-  { label: "设置", href: "/settings", icon: Settings, adminOnly: true },
 ];
 
+/** 映射到真实路由：看板 → /boards 列表页；成员 → /teams/{teamId}/members */
 function hrefFor(tab: TabItem, teamId?: string) {
-  if (tab.href === "/boards") return teamId ? `/boards/${teamId}` : "/boards";
-  if (tab.href === "/members") return teamId ? `/teams/${teamId}/members` : "/members";
+  if (tab.href === "/boards") return "/boards";
+  if (tab.href === "/members") return teamId ? `/teams/${teamId}/members` : "/boards";
   return tab.href;
 }
 
@@ -32,8 +34,7 @@ export function TabBar() {
   const pathname = usePathname();
   const { data: me } = useMe();
   const teamId = me?.team?.id;
-  const isAdmin = canAdmin(me?.role);
-  const tabs = TABS.filter((t) => !t.adminOnly || isAdmin).slice(0, 5);
+  const tabs = TABS.slice(0, 5);
 
   return (
     <nav
@@ -42,7 +43,11 @@ export function TabBar() {
     >
       {tabs.map((tab) => {
         const href = hrefFor(tab, teamId);
-        const active = pathname.startsWith(tab.href);
+        // 看板详情页（/boards/{id}）也应点亮「看板」tab
+        const active =
+          tab.href === "/boards"
+            ? pathname.startsWith("/boards")
+            : pathname.startsWith(tab.href);
         const Icon = tab.icon;
         return (
           <Link

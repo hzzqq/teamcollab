@@ -4,16 +4,13 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronsLeftRight,
-  FolderKanban,
-  Inbox,
   ListChecks,
-  Settings,
   SquareKanban,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMe, canAdmin } from "@/hooks/use-me";
+import { useMe } from "@/hooks/use-me";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -26,18 +23,26 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+/**
+ * 已实现的导航项（DESIGN.md §4.7 的 6 项中，当前 MVP 只落地了这 3 项路由）。
+ *
+ * 设计文档中的「收件箱 / 项目 / 设置」目前没有对应页面：按 PROJECT_BOUNDARY.md
+ * 「扩展位 ≠ 现在就做」，不为占位功能新建页面；渲染无路由的导航项则会 404。
+ * 待对应页面落地时再补进本列表即可。
+ */
 const NAV_ITEMS: NavItem[] = [
-  { label: "收件箱", href: "/inbox", icon: Inbox },
   { label: "我的任务", href: "/me/tasks", icon: ListChecks },
-  { label: "项目", href: "/projects", icon: FolderKanban },
   { label: "看板", href: "/boards", icon: SquareKanban },
   { label: "成员", href: "/members", icon: Users },
-  { label: "设置", href: "/settings", icon: Settings },
 ];
 
+/** 把导航项映射到真实路由：
+ * - 看板 → /boards（团队看板列表页）
+ * - 成员 → /teams/{teamId}/members（成员管理在团队上下文下）
+ */
 function hrefFor(item: NavItem, teamId?: string) {
-  if (item.href === "/boards") return teamId ? `/boards/${teamId}` : "/boards";
-  if (item.href === "/members") return teamId ? `/teams/${teamId}/members` : "/members";
+  if (item.href === "/boards") return "/boards";
+  if (item.href === "/members") return teamId ? `/teams/${teamId}/members` : "/boards";
   return item.href;
 }
 
@@ -51,9 +56,8 @@ export function Sidebar({
   const pathname = usePathname();
   const { data: me, isLoading } = useMe();
   const teamId = me?.team?.id;
-  const isAdmin = canAdmin(me?.role);
 
-  const visibleItems = NAV_ITEMS.filter((item) => item.href !== "/settings" || isAdmin);
+  const visibleItems = NAV_ITEMS;
 
   return (
     <aside

@@ -100,12 +100,34 @@ def main():
         check("list_comments", r.status_code == 200 and len(r.json()["data"]["items"]) >= 1, r.text[:120])
 
         # 9. 拖拽移动任务（跨列）
+        # 契约：路径 columnId = 目标列（与前端 KanbanBoard 的真实调用一致）。
+        # 历史缺陷：前端曾传「源列」→ 400；此处与 server/tests/test_drag_contract.py 互为对照。
         r = c.patch(
             f"/api/v1/boards/{board['id']}/columns/{col_ids[1]}/tasks/{task['id']}/position",
             json={"target_column_id": col_ids[1], "position": 0},
             headers=H,
         )
         check("move_task", r.status_code == 200 and r.json()["data"]["column_id"] == col_ids[1], f"{r.status_code} {r.text[:120]}")
+
+        # 9.1 反向守卫：路径列 != body.target_column_id 必须被拒（不静默接受）
+        r = c.patch(
+            f"/api/v1/boards/{board['id']}/columns/{col_ids[0]}/tasks/{task['id']}/position",
+            json={"target_column_id": col_ids[1], "position": 0},
+            headers=H,
+        )
+        check(
+            "move_task_reject_source_column_in_path",
+            r.status_code == 400 and r.json().get("code") == 40001,
+            f"{r.status_code} {r.text[:120]}",
+        )
+
+        # 9.2 拖拽后各列 position 必须连续（0..n-1），不能留空洞
+        detail = c.get(f"/api/v1/boards/{board['id']}", headers=H).json()["data"]
+        dense = all(
+            [t["position"] for t in col["tasks"]] == list(range(len(col["tasks"])))
+            for col in detail["columns"]
+        )
+        check("move_task_positions_dense", dense, "列内 position 存在空洞")
 
         # 10. 我的任务聚合
         r = c.get("/api/v1/me/tasks", headers=H)

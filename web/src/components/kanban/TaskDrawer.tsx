@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { HighlightMentions } from "@/components/common/highlight-mentions";
 import { timeAgo } from "@/lib/format";
 import { initials } from "@/lib/utils";
@@ -75,41 +76,29 @@ export function TaskDrawer({
   const open = Boolean(taskId);
 
   return (
-    <>
-      {open ? (
-        <div
-          className="fixed inset-0 z-[1200] flex justify-end"
-          role="dialog"
-          aria-modal="true"
-          aria-label="任务详情"
-        >
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={onClose}
-            aria-hidden
-          />
-          <div className="relative flex h-full w-full max-w-[480px] flex-col border-l border-border bg-surface shadow-raised animate-in slide-in-from-right">
-            {/* 头部 */}
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="text-xs text-meta">任务详情</span>
-              <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
-                <X size={18} strokeWidth={1.5} />
-              </Button>
-            </div>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent variant="side" aria-label="任务详情">
+        {/* 头部 */}
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <DialogTitle className="text-xs font-medium text-meta">任务详情</DialogTitle>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
+            <X size={18} strokeWidth={1.5} />
+          </Button>
+        </div>
 
-            {isLoading || !task ? (
-              <div className="flex-1 p-6 text-sm text-muted">加载中…</div>
-            ) : (
-              <div className="flex-1 overflow-auto">
-                {/* 标题 */}
-                <div className="border-b border-border px-4 py-3">
-                  <Input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    onBlur={() => title.trim() && title !== task.title && updateTask.mutate({ taskId: task.id, req: { title: title.trim() } })}
-                    className="border-0 px-0 text-base font-medium focus-visible:ring-0"
-                  />
-                </div>
+        {isLoading || !task ? (
+          <div className="flex-1 p-6 text-sm text-muted">加载中…</div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            {/* 标题 */}
+            <div className="border-b border-border px-4 py-3">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => title.trim() && title !== task.title && updateTask.mutate({ taskId: task.id, req: { title: title.trim() } })}
+                className="border-0 px-0 text-base font-medium focus-visible:ring-0"
+              />
+            </div>
 
                 {/* 字段 */}
                 <div className="grid grid-cols-2 gap-3 px-4 py-3">
@@ -212,24 +201,22 @@ export function TaskDrawer({
               </div>
             )}
 
-            {/* 底部删除（member+ 显示） */}
-            {task && me && (me.role === "owner" || me.role === "admin" || me.role === "member") ? (
-              <div className="border-t border-border px-4 py-3">
-                <Button
-                  variant="ghost"
-                  className="text-danger hover:bg-danger/10"
-                  onClick={handleDelete}
-                  disabled={deleteTask.isPending}
-                >
-                  <Trash2 size={16} strokeWidth={1.5} />
-                  删除任务
-                </Button>
-              </div>
-            ) : null}
+        {/* 底部删除（member+ 显示） */}
+        {task && me && (me.role === "owner" || me.role === "admin" || me.role === "member") ? (
+          <div className="border-t border-border px-4 py-3">
+            <Button
+              variant="ghost"
+              className="text-danger hover:bg-danger/10"
+              onClick={handleDelete}
+              disabled={deleteTask.isPending}
+            >
+              <Trash2 size={16} strokeWidth={1.5} />
+              删除任务
+            </Button>
           </div>
-        </div>
-      ) : null}
-    </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 

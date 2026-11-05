@@ -1,7 +1,7 @@
 """端到端冒烟：证明 TeamCollab 后端「真能跑、核心功能可用」。
 
 与 .pgtmp/smoke.py 的区别：本脚本自注册全新用户（不依赖 seed 数据），
-因此可重复运行、无副作用。覆盖：注册/登录/me/me-teams/看板/列/任务/
+因此可重复运行、无副作用。覆盖：注册/登录/me/me-teams/创建团队/看板/列/任务/
 评论/拖拽移动/我的任务/通知/RBAC 越权拦截/SSE 实时流/CORS。
 
 前置：PostgreSQL 已启动 + alembic upgrade head + uvicorn 在 :8000。
@@ -67,6 +67,16 @@ def main():
         # 3. /me/teams（cycle2 新增端点）
         r = c.get("/api/v1/me/teams", headers=H)
         check("me_teams", r.status_code == 200 and len(r.json()["data"]) >= 1, r.text[:120])
+
+        # 3.5 创建团队（createTeam，前端 /projects 页「新建团队」走的端点）
+        # 验证：201 + 落库 + 立即出现在 /me/teams（多团队切换的数据基础）
+        team_name = f"E2E 团队 {uuid.uuid4().hex[:6]}"
+        r = c.post("/api/v1/teams", json={"name": team_name}, headers=H)
+        check("create_team", r.status_code == 201 and r.json().get("code") == 0, f"{r.status_code} {r.text[:120]}")
+        created_team_id = r.json()["data"]["id"]
+        r = c.get("/api/v1/me/teams", headers=H)
+        in_me_teams = any(t.get("team", {}).get("id") == created_team_id for t in r.json()["data"])
+        check("create_team_in_me_teams", in_me_teams, "新建团队未出现在 /me/teams")
 
         # 4. 建看板
         r = c.post(f"/api/v1/teams/{team_id}/boards", json={"name": "E2E 看板"}, headers=H)

@@ -38,6 +38,9 @@ __pycache__/
 *.log
 pg.log
 
+# ===== E2E 截图（验收主线浏览器测试产物，非源码） =====
+web/e2e/shots/
+
 # ===== OS / editor =====
 .DS_Store
 Thumbs.db

@@ -85,9 +85,10 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 - 后端：pytest **115 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**）
 - 前端：tsc 0 错误、ESLint 0 警告、**单元测试 17/17**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
 - 拖拽契约：前后端共用同一套落位语义 —— 路径 `columnId` = **目标列**；`server/tests/test_drag_contract.py`（10 例）与 `web/tests/drag-position.test.mjs`（12 例）互为对照，任一方改动契约必红
-- API e2e 冒烟（`scripts/e2e_smoke.py`，真实起服）：覆盖注册/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/RBAC/SSE/CORS/到期提醒
-- **多实例三件套验证**（`scripts/multi_instance_verify.py`，跨进程真实验证）：SSE 广播跨实例 / 限流计数跨实例共享 / 超限跨实例生效 / 调度器 advisory lock 互斥 —— 全部通过
-- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + pytest + e2e + 多实例验证；frontend：npm ci + tsc + lint + test + build）
+- API e2e 冒烟（`server/scripts/e2e_smoke.py`，真实起服）：覆盖注册/登录/**me/me-teams/创建团队**/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/我的任务/通知/RBAC/SSE/CORS/到期提醒 —— **26/26 全绿**
+- **多实例三件套验证**（`server/scripts/multi_instance_verify.py`，跨进程真实验证）：SSE 广播跨实例 / 限流计数跨实例共享 / 超限跨实例生效 / 调度器 advisory lock 互斥 —— 全部通过
+- **验收主线 E2E**（`web/e2e/mainline-e2e.js`，真实浏览器 Playwright）：Spec §2 注册→建板→邀请→成员入队→分配+SSE 实时通知→状态更新→全局视图。脚本已提升到受跟踪路径（原 `.pgtmp` 被 gitignore，CI 拉不到）；浏览器选择可移植——本地 Windows 用系统 Edge，CI 回退 Playwright 自带 chromium
+- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + pytest + API e2e 冒烟 + 多实例验证；frontend：npm ci + tsc + lint + test + build；**e2e-browser**：构建前端 + 起前后端 + Playwright chromium 跑验收主线 E2E）
 - P0 门禁：全代码 emoji 零容忍、无紫粉渐变、图标 lucide 唯一
 
 ## 多租户与多团队

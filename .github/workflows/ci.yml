@@ -114,3 +114,93 @@ jobs:
           # 与本地 .env.production（未入库）等价：生产模式走 real API
           NEXT_PUBLIC_API_MODE: real
         run: npm run build
+
+  # 验收主线 E2E（真实浏览器 + 真实前后端，Spec §2）：PM 注册→建板→邀请→成员入队→
+  # 分配+SSE 实时通知→状态更新→全局视图。本机因 next build 被宿主 safe-delete 门禁拦，
+  # 故放在 CI（ubuntu 可正常构建）留证。脚本提升到受跟踪的 web/e2e/（原 .pgtmp 被 gitignore，CI 拉不到）。
+  e2e-browser:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    defaults:
+      run:
+        working-directory: web
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: collab
+          POSTGRES_PASSWORD: collab
+          POSTGRES_DB: collab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U collab -d collab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://collab:collab@localhost:5432/collab
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build frontend (real API 模式)
+        env:
+          NEXT_PUBLIC_API_MODE: real
+        run: npm run build
+
+      - name: Install backend deps
+        working-directory: server
+        run: pip install -r requirements-dev.txt
+
+      - name: Run migrations
+        working-directory: server
+        run: python -m alembic upgrade head
+
+      - name: Start backend (:8000)
+        working-directory: server
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/openapi.json > /dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Start frontend (:3000)
+        run: |
+          npm run start -- -p 3000 &
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:3000 > /dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-save playwright@1.51.1
+          npx playwright install --with-deps chromium
+
+      - name: Run mainline e2e (Spec §2 验收主线)
+        run: node e2e/mainline-e2e.js
+

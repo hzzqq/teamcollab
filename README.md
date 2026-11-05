@@ -19,6 +19,7 @@
 
 ```
 docs/            # Phase 1 三文档 + Spec v1.0 + Phase 2 设计系统（契约）
+docs/v1.0-release.md  # v1.0 发布文档（功能清单 / 验收证据 / 已知限制 / 部署形态）
 web/             # Next.js 前端（8 路由）
 server/          # FastAPI 后端（27 端点 / 8 表 / 迁移）
 docker-compose.yml  # PostgreSQL 17（pgvector 镜像）

@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { initials } from "@/lib/utils";
+import { LabelChip } from "@/components/kanban/label-chip";
+import { filterTasks, isFilterActive, type BoardFilter } from "@/lib/board-filter";
 import type { BoardColumnWithTasks, Task } from "@/lib/api-types";
 
 const PRIORITY_DOT: Record<Task["priority"], string> = {
@@ -40,9 +42,11 @@ const PRIORITY_DOT: Record<Task["priority"], string> = {
 export function KanbanBoard({
   boardId,
   onOpenTask,
+  filter,
 }: {
   boardId: string;
   onOpenTask: (taskId: string) => void;
+  filter?: BoardFilter;
 }) {
   const { data: board, isLoading } = useBoard(boardId);
   const { data: me } = useMe();
@@ -50,6 +54,9 @@ export function KanbanBoard({
   const moveTask = useMoveTask(boardId);
   const createTask = useCreateTask(boardId);
   const createColumn = useCreateColumn(boardId);
+
+  // 筛选激活时关闭拖拽：避免 SortableContext 项与全量列错位导致落位计算错误（保护拖拽契约）
+  const filtering = filter ? isFilterActive(filter) : false;
 
   const [addingCol, setAddingCol] = useState(false);
   const [newColName, setNewColName] = useState("");
@@ -90,8 +97,9 @@ export function KanbanBoard({
         {board.columns.map((col) => (
           <Column
             key={col.id}
-            column={col}
+            column={filter ? { ...col, tasks: filterTasks(col.tasks, filter) } : col}
             writable={writable}
+            dragDisabled={filtering}
             onOpenTask={onOpenTask}
             onAddTask={(title) => createTask.mutate({ column_id: col.id, title, priority: "medium" })}
             isPending={createTask.isPending}
@@ -151,12 +159,14 @@ export function KanbanBoard({
 function Column({
   column,
   writable,
+  dragDisabled,
   onOpenTask,
   onAddTask,
   isPending,
 }: {
   column: BoardColumnWithTasks;
   writable: boolean;
+  dragDisabled: boolean;
   onOpenTask: (taskId: string) => void;
   onAddTask: (title: string) => void;
   isPending: boolean;
@@ -208,7 +218,7 @@ function Column({
 
         <SortableContext items={column.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} writable={writable} onOpen={() => onOpenTask(task.id)} />
+            <TaskCard key={task.id} task={task} writable={writable} dragDisabled={dragDisabled} onOpen={() => onOpenTask(task.id)} />
           ))}
         </SortableContext>
 
@@ -223,13 +233,15 @@ function Column({
 function TaskCard({
   task,
   writable,
+  dragDisabled,
   onOpen,
 }: {
   task: Task;
   writable: boolean;
+  dragDisabled: boolean;
   onOpen: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled: dragDisabled });
   const due = dueState(task.due_date, task.status);
 
   return (
@@ -242,7 +254,7 @@ function TaskCard({
       )}
     >
       <div className="flex items-start gap-1.5">
-        {writable ? (
+        {writable && !dragDisabled ? (
           <button
             {...attributes}
             {...listeners}
@@ -256,6 +268,13 @@ function TaskCard({
           <span className="line-clamp-2">{task.title}</span>
         </button>
       </div>
+      {task.labels.length > 0 ? (
+        <div className="flex flex-wrap gap-1 pl-5">
+          {task.labels.map((l) => (
+            <LabelChip key={l.id} label={l} />
+          ))}
+        </div>
+      ) : null}
       <div className="flex items-center justify-between pl-5">
         <span className={cn("size-2 rounded-full", PRIORITY_DOT[task.priority])} aria-label={`优先级 ${task.priority}`} />
         <div className="flex items-center gap-2">

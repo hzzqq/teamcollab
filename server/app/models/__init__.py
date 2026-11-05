@@ -3,6 +3,7 @@
 from app.core.db import Base
 from app.models.board import Board
 from app.models.board_column import BoardColumn
+from app.models.label import Label, task_labels
 from app.models.notification import Notification
 from app.models.task import Task
 from app.models.task_comment import TaskComment
@@ -20,4 +21,6 @@ __all__ = [
     "Task",
     "TaskComment",
     "Notification",
+    "Label",
+    "task_labels",
 ]

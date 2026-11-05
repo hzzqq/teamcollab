@@ -42,6 +42,10 @@ def list_tasks(
     q: str | None = Query(default=None, max_length=200),
     assignee_id: uuid.UUID | None = Query(default=None),
     status: str | None = Query(default=None, pattern="^(todo|in_progress|done)$"),
+    priority: str | None = Query(
+        default=None, pattern="^(low|medium|high|urgent)$"
+    ),
+    label_id: uuid.UUID | None = Query(default=None),
     column_id: uuid.UUID | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
@@ -53,6 +57,8 @@ def list_tasks(
         q=q,
         assignee_id=assignee_id,
         status=status,
+        priority=priority,
+        label_id=label_id,
         column_id=column_id,
         page=page,
         limit=limit,

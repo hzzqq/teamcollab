@@ -8,6 +8,7 @@ from app.core.errors import bad_request, not_found
 from app.models.task import Task
 from app.models.user import User
 from app.repositories.board_repo import board_repo
+from app.repositories.label_repo import label_repo
 from app.repositories.task_repo import task_repo
 from app.repositories.team_repo import team_repo
 from app.schemas.task import TaskCreateRequest, TaskUpdateRequest
@@ -39,6 +40,9 @@ class TaskService:
             created_by=actor.id,
         )
         db.flush()
+        if data.label_ids:
+            self._ensure_labels_belong_to_team(db, team_id, data.label_ids)
+            label_repo.replace_task_labels(db, task.id, data.label_ids)
 
         notifications: list = []
         if data.assignee_id and data.assignee_id != actor.id:
@@ -80,6 +84,8 @@ class TaskService:
         q: str | None = None,
         assignee_id: uuid.UUID | None = None,
         status: str | None = None,
+        priority: str | None = None,
+        label_id: uuid.UUID | None = None,
         column_id: uuid.UUID | None = None,
         page: int = 1,
         limit: int = 20,
@@ -91,6 +97,8 @@ class TaskService:
             q=q,
             assignee_id=assignee_id,
             status=status,
+            priority=priority,
+            label_id=label_id,
             column_id=column_id,
             page=page,
             limit=limit,
@@ -146,7 +154,13 @@ class TaskService:
             task.due_date = data.due_date
         if "start_date" in fields:
             task.start_date = data.start_date
+        if "label_ids" in fields and data.label_ids is not None:
+            self._ensure_labels_belong_to_team(db, team_id, data.label_ids)
+            label_repo.replace_task_labels(db, task.id, data.label_ids)
         db.flush()
+        if "label_ids" in fields and data.label_ids is not None:
+            # 同上：刷新 labels 集合，避免 identity map 复用陈旧空集合
+            db.refresh(task, ["labels"])
 
         notifications: list = []
         assignee_changed = "assignee_id" in fields and task.assignee_id != old_assignee
@@ -284,6 +298,17 @@ class TaskService:
         member = team_repo.get_member(db, team_id, user_id)
         if member is None:
             raise bad_request("指定的负责人不在团队成员中")
+
+    @staticmethod
+    def _ensure_labels_belong_to_team(
+        db: Session, team_id: uuid.UUID, label_ids: list[uuid.UUID]
+    ) -> None:
+        if not label_ids:
+            return
+        owned = {lbl.id for lbl in label_repo.list_by_team(db, team_id)}
+        unknown = [lid for lid in label_ids if lid not in owned]
+        if unknown:
+            raise bad_request("存在不属于本团队的标签")
 
     @staticmethod
     def _publish_created_notifications(notifications: list) -> None:

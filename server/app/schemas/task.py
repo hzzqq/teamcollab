@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.common import ApiResponse, Paginated, strip_non_blank
+from app.schemas.label import LabelOut
 
 Priority = Literal["low", "medium", "high", "urgent"]
 TaskStatus = Literal["todo", "in_progress", "done"]
@@ -38,6 +39,7 @@ class TaskOut(BaseModel):
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    labels: list[LabelOut] = []
 
 
 class TaskResponse(ApiResponse[TaskOut]):
@@ -62,6 +64,7 @@ class TaskCreateRequest(BaseModel):
     status: TaskStatus = "todo"
     due_date: Optional[date] = None
     start_date: Optional[date] = None
+    label_ids: Optional[list[uuid.UUID]] = None
 
     @model_validator(mode="after")
     def _check_dates(self) -> "TaskCreateRequest":
@@ -79,6 +82,7 @@ class TaskUpdateRequest(BaseModel):
     status: Optional[TaskStatus] = None
     due_date: Optional[date] = None
     start_date: Optional[date] = None
+    label_ids: Optional[list[uuid.UUID]] = None
 
     @field_validator("title")
     @classmethod

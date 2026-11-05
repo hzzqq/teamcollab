@@ -9,8 +9,10 @@ import type {
   BoardDetail,
   Comment,
   CreateCommentRequest,
+  CreateLabelRequest,
   CreateTaskRequest,
   InviteMemberRequest,
+  Label,
   Member,
   MoveTaskRequest,
   Paginated,
@@ -20,6 +22,7 @@ import type {
   Role,
   Task,
   Team,
+  UpdateLabelRequest,
   UpdateTaskRequest,
   User,
   UserTeam,
@@ -212,6 +215,7 @@ export const mockApi = {
       created_by: currentUser().id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      labels: [],
     };
     db.tasks[req.column_id] = [...(db.tasks[req.column_id] || []), task];
     return delay(ok(task));
@@ -235,6 +239,60 @@ export const mockApi = {
       db.tasks[key] = db.tasks[key].map((t) => (t.id === taskId ? updated : t));
     }
     return delay(ok(updated));
+  },
+
+  /* ---------------- 标签（团队级） ---------------- */
+
+  async labels(teamId: string): Promise<ApiEnvelope<Label[]>> {
+    return delay(ok(db.labels[teamId] || []));
+  },
+
+  async createLabel(teamId: string, req: CreateLabelRequest): Promise<ApiEnvelope<Label>> {
+    const label: Label = {
+      id: `lb-${++tokenSeq}`,
+      team_id: teamId,
+      name: req.name,
+      color: req.color || "blue",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    db.labels[teamId] = [...(db.labels[teamId] || []), label];
+    return delay(ok(label));
+  },
+
+  async updateLabel(teamId: string, labelId: string, req: UpdateLabelRequest): Promise<ApiEnvelope<Label>> {
+    const list = db.labels[teamId] || [];
+    const idx = list.findIndex((l) => l.id === labelId);
+    if (idx < 0) return delay(err(40401, "标签不存在"));
+    const updated: Label = {
+      ...list[idx],
+      ...(req.name !== undefined ? { name: req.name } : {}),
+      ...(req.color !== undefined ? { color: req.color } : {}),
+      updated_at: new Date().toISOString(),
+    };
+    db.labels[teamId] = list.map((l, i) => (i === idx ? updated : l));
+    return delay(ok(updated));
+  },
+
+  async deleteLabel(teamId: string, labelId: string): Promise<ApiEnvelope<Label>> {
+    const list = db.labels[teamId] || [];
+    const target = list.find((l) => l.id === labelId);
+    if (!target) return delay(err(40401, "标签不存在"));
+    db.labels[teamId] = list.filter((l) => l.id !== labelId);
+    return delay(ok(target));
+  },
+
+  async assignTaskLabels(taskId: string, labelIds: string[]): Promise<ApiEnvelope<Label[]>> {
+    const all = Object.values(db.tasks).flat();
+    const task = all.find((t) => t.id === taskId);
+    if (!task) return delay(err(40401, "任务不存在"));
+    const teamId = db.boards.find((b) => b.id === task.board_id)?.team_id || "t-1";
+    const teamLabels = db.labels[teamId] || [];
+    const assigned = teamLabels.filter((l) => labelIds.includes(l.id));
+    for (const key of Object.keys(db.tasks)) {
+      db.tasks[key] = db.tasks[key].map((t) => (t.id === taskId ? { ...t, labels: assigned } : t));
+    }
+    return delay(ok(assigned));
   },
 
   async deleteTask(taskId: string): Promise<ApiEnvelope<{ ok: boolean }>> {

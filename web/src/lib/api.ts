@@ -15,8 +15,10 @@ import type {
   BoardDetail,
   Comment,
   CreateCommentRequest,
+  CreateLabelRequest,
   CreateTaskRequest,
   InviteMemberRequest,
+  Label,
   Member,
   MoveTaskRequest,
   Paginated,
@@ -26,6 +28,7 @@ import type {
   Role,
   Task,
   Team,
+  UpdateLabelRequest,
   UpdateTaskRequest,
   UserTeam,
 } from "./api-types";
@@ -94,7 +97,7 @@ function redirectToLogin(): void {
 
 async function rawRequest<T>(
   path: string,
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   opts: { body?: unknown; auth?: boolean; form?: boolean; retried?: boolean } = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
@@ -275,6 +278,36 @@ export const api = {
   async markAllRead(): Promise<{ ok: boolean; updated: number }> {
     if (API_MODE === "mock") return unwrap(await mockApi.markAllRead());
     return rawRequest("/api/v1/notifications/read-all", "POST");
+  },
+
+  /** 团队标签列表（viewer+） */
+  async labels(teamId: string): Promise<Label[]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.labels(teamId));
+    return rawRequest(`/api/v1/teams/${teamId}/labels`, "GET");
+  },
+
+  /** 创建标签（admin+） */
+  async createLabel(teamId: string, req: CreateLabelRequest): Promise<Label> {
+    if (API_MODE === "mock") return unwrap(await mockApi.createLabel(teamId, req));
+    return rawRequest(`/api/v1/teams/${teamId}/labels`, "POST", { body: req });
+  },
+
+  /** 更新标签（admin+） */
+  async updateLabel(teamId: string, labelId: string, req: UpdateLabelRequest): Promise<Label> {
+    if (API_MODE === "mock") return unwrap(await mockApi.updateLabel(teamId, labelId, req));
+    return rawRequest(`/api/v1/teams/${teamId}/labels/${labelId}`, "PUT", { body: req });
+  },
+
+  /** 删除标签（admin+） */
+  async deleteLabel(teamId: string, labelId: string): Promise<Label> {
+    if (API_MODE === "mock") return unwrap(await mockApi.deleteLabel(teamId, labelId));
+    return rawRequest(`/api/v1/teams/${teamId}/labels/${labelId}`, "DELETE");
+  },
+
+  /** 赋值任务标签（整体覆盖，member+） */
+  async assignTaskLabels(taskId: string, labelIds: string[]): Promise<Label[]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.assignTaskLabels(taskId, labelIds));
+    return rawRequest(`/api/v1/tasks/${taskId}/labels`, "PUT", { body: { label_ids: labelIds } });
   },
 
   /** SSE 通知流 URL（EventSource 无法自定义 Header，走 query token） */

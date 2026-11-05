@@ -4,12 +4,19 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import case, func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.board import Board
+from app.models.label import task_labels
 from app.models.task import Task
 
-_TASK_LOADS = (joinedload(Task.assignee), joinedload(Task.board))
+# labels 是集合关系，用 selectinload（独立二次查询）避免 joinedload 在列表查询中
+# 造成行膨胀并要求 .unique()；assignee/board 是单值，保留 joinedload。
+_TASK_LOADS = (
+    joinedload(Task.assignee),
+    joinedload(Task.board),
+    selectinload(Task.labels),
+)
 
 
 def _base_task_query() -> select:
@@ -90,6 +97,8 @@ class TaskRepo:
         q: str | None = None,
         assignee_id: uuid.UUID | None = None,
         status: str | None = None,
+        priority: str | None = None,
+        label_id: uuid.UUID | None = None,
         column_id: uuid.UUID | None = None,
         page: int = 1,
         limit: int = 20,
@@ -102,6 +111,14 @@ class TaskRepo:
             conds.append(Task.assignee_id == assignee_id)
         if status:
             conds.append(Task.status == status)
+        if priority:
+            conds.append(Task.priority == priority)
+        if label_id:
+            conds.append(
+                Task.id.in_(
+                    select(task_labels.c.task_id).where(task_labels.c.label_id == label_id)
+                )
+            )
         if column_id:
             conds.append(Task.column_id == column_id)
 

@@ -6,6 +6,7 @@ import { Flag, Trash2, X } from "lucide-react";
 import { useMe } from "@/hooks/use-me";
 import { useMembers } from "@/hooks/use-members";
 import { useTaskDetail, useUpdateTask, useDeleteTask } from "@/hooks/use-board";
+import { useLabels, useAssignTaskLabels } from "@/hooks/use-labels";
 import { useComments, useCreateComment } from "@/hooks/use-comments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { HighlightMentions } from "@/components/common/highlight-mentions";
 import { timeAgo } from "@/lib/format";
-import { initials } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 import type { Priority, TaskStatus } from "@/lib/api-types";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -55,6 +56,10 @@ export function TaskDrawer({
   const deleteTask = useDeleteTask(boardId);
   const { data: comments, isLoading: commentsLoading } = useComments(taskId || "");
   const createComment = useCreateComment(taskId || "");
+
+  const teamId = me?.team?.id || "";
+  const { data: teamLabels } = useLabels(teamId);
+  const assignLabels = useAssignTaskLabels(boardId);
 
   const [title, setTitle] = useState("");
   const knownNames = new Set((members ?? []).map((m) => m.user.display_name));
@@ -148,6 +153,41 @@ export function TaskDrawer({
                       value={task.due_date || ""}
                       onChange={(e) => updateTask.mutate({ taskId: task.id, req: { due_date: e.target.value || null } })}
                     />
+                  </Field>
+                </div>
+
+                {/* 标签（整体覆盖式赋值，member+） */}
+                <div className="px-4 pb-1">
+                  <Field label="标签">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(teamLabels || []).map((l) => {
+                        const active = (task.labels || []).some((x) => x.id === l.id);
+                        const c = `var(--color-tag-${l.color})`;
+                        return (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => {
+                              const next = new Set((task.labels || []).map((x) => x.id));
+                              if (active) next.delete(l.id);
+                              else next.add(l.id);
+                              assignLabels.mutate({ taskId: task.id, labelIds: [...next] });
+                            }}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-xs font-medium transition-colors duration-fast",
+                              active ? "border-transparent" : "border-border hover:border-primary-500",
+                            )}
+                            style={active ? { backgroundColor: `color-mix(in oklab, ${c} 18%, var(--surface))`, color: c } : undefined}
+                          >
+                            <span className="size-1.5 rounded-full" style={{ backgroundColor: c }} />
+                            {l.name}
+                          </button>
+                        );
+                      })}
+                      {(teamLabels || []).length === 0 ? (
+                        <span className="text-xs text-meta">暂无可用的团队标签</span>
+                      ) : null}
+                    </div>
                   </Field>
                 </div>
 

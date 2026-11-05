@@ -7,6 +7,8 @@
 export type Role = "owner" | "admin" | "member" | "viewer";
 export type Priority = "low" | "medium" | "high" | "urgent";
 export type TaskStatus = "todo" | "in_progress" | "done";
+/** 标签调色板（与后端 VALID_LABEL_COLORS 一致，避开 purple/rose 偏粉） */
+export type LabelColor = "blue" | "green" | "amber" | "rose" | "slate";
 export type NotificationType =
   | "task_assigned"
   | "task_moved"
@@ -136,6 +138,17 @@ export interface Task {
   created_by: string;
   created_at: string;
   updated_at: string;
+  labels: Label[];
+}
+
+/** 团队级标签（team 资源，与 board 无关） */
+export interface Label {
+  id: string;
+  team_id: string;
+  name: string;
+  color: LabelColor;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Paginated<T> {
@@ -193,6 +206,7 @@ export interface CreateTaskRequest {
   status?: TaskStatus;
   due_date?: string | null;
   start_date?: string | null;
+  label_ids?: string[];
 }
 
 export interface UpdateTaskRequest {
@@ -204,6 +218,17 @@ export interface UpdateTaskRequest {
   status?: TaskStatus;
   due_date?: string | null;
   start_date?: string | null;
+  label_ids?: string[];
+}
+
+export interface CreateLabelRequest {
+  name: string;
+  color?: LabelColor;
+}
+
+export interface UpdateLabelRequest {
+  name?: string;
+  color?: LabelColor;
 }
 
 export interface MoveTaskRequest {

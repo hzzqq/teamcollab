@@ -7,6 +7,7 @@ import type {
   BoardColumn,
   BoardColumnWithTasks,
   Comment,
+  Label,
   Member,
   NotificationItem,
   Task,
@@ -22,6 +23,7 @@ export interface MockDb {
   columns: Record<string, BoardColumn[]>; // boardId -> columns
   tasks: Record<string, Task[]>; // columnId -> tasks
   comments: Record<string, Comment[]>; // taskId -> comments
+  labels: Record<string, Label[]>; // teamId -> labels（团队级）
   notifications: NotificationItem[];
   session: { access: string; refresh: string; userId: string } | null;
 }
@@ -93,6 +95,7 @@ export function seedDb(): MockDb {
     created_by: "u-pm",
     created_at: now,
     updated_at: now,
+    labels: [],
   });
 
   const tasks: Record<string, Task[]> = {
@@ -145,6 +148,15 @@ export function seedDb(): MockDb {
     },
   ];
 
+  const labels: Record<string, Label[]> = {
+    "t-1": [
+      { id: "lb-bug", team_id: "t-1", name: "缺陷", color: "rose", created_at: now, updated_at: now },
+      { id: "lb-feat", team_id: "t-1", name: "需求", color: "blue", created_at: now, updated_at: now },
+      { id: "lb-design", team_id: "t-1", name: "设计", color: "amber", created_at: now, updated_at: now },
+      { id: "lb-infra", team_id: "t-1", name: "基建", color: "green", created_at: now, updated_at: now },
+    ],
+  };
+
   return {
     users: [...seedUsers],
     teams: [{ ...seedTeam }],
@@ -160,6 +172,7 @@ export function seedDb(): MockDb {
     columns: { "b-1": cols },
     tasks,
     comments,
+    labels,
     notifications,
     session: null,
   };

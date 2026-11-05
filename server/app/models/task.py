@@ -19,9 +19,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base import TimestampMixin, UUIDPkMixin
+from app.models.label import task_labels
 
 if TYPE_CHECKING:
     from app.models.board import Board
+    from app.models.label import Label
     from app.models.user import User
 
 VALID_PRIORITIES = ("low", "medium", "high", "urgent")
@@ -72,3 +74,6 @@ class Task(UUIDPkMixin, TimestampMixin, Base):
 
     assignee: Mapped["User | None"] = relationship("User", foreign_keys=[assignee_id], lazy="raise")
     board: Mapped["Board"] = relationship("Board", lazy="raise")
+    labels: Mapped[list["Label"]] = relationship(  # noqa: F821
+        "Label", secondary=task_labels, back_populates="tasks", lazy="raise"
+    )

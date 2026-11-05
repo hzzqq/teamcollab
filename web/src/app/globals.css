@@ -53,6 +53,7 @@
   --color-tag-amber:  var(--tag-amber);
   --color-tag-purple: var(--tag-purple);
   --color-tag-rose:   var(--tag-rose);
+  --color-tag-slate:  var(--tag-slate);
 
   /* 字体 */
   --font-display: var(--font-display);

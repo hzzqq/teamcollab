@@ -31,25 +31,34 @@ function check(name, ok, detail = "") {
 const shot = (page, name) =>
   page.screenshot({ timeout: 10000, animations: "disabled", path: `${SHOT_DIR}/${name}.png` }).catch(() => {});
 
-// Radix Select 在 Playwright 下的稳定选择：选项渲染在 portal 且外层可能处于
-// 开合动画中，默认 click 的可见性/稳定性检查会超时（CI 实测 step7 卡 30s）。
-// 这里先滚动到位 + 强制点击 + 重试，规避动画不稳定与潜在遮挡。
+// selectRadix：Radix Select 嵌在 Dialog 抽屉内，直接点选项常被遮罩拦截致赋值静默
+// 失败；用键盘 typeahead 选中并校验 combobox 显示值，兜底 force 点击。
 async function selectRadix(page, labelLocator, optionName) {
   const combo = labelLocator.locator('[role="combobox"]');
-  await combo.click();
-  const opt = page.getByRole("option", { name: optionName }).first();
-  await opt.waitFor({ state: "visible", timeout: 10000 });
-  let ok = false;
-  for (let i = 0; i < 3 && !ok; i++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await combo.click();
+    await page.waitForTimeout(150);
+    // 键盘 typeahead：输入选项文本命中，回车确认（对 Select-in-Dialog 最稳）
     try {
-      await opt.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-      await opt.click({ force: true, timeout: 5000 });
-      ok = true;
+      await page.keyboard.type(optionName, { delay: 25 });
+      await page.keyboard.press("Enter");
     } catch {
-      await page.waitForTimeout(400);
+      /* 忽略，走下方兜底 */
     }
+    await page.waitForTimeout(300);
+    let val = (await combo.textContent().catch(() => "")) || "";
+    if (val.includes(optionName)) return;
+    // 兜底：强制点选项（仍可能被遮罩拦截，但作为最后手段）
+    const opt = page.getByRole("option", { name: optionName }).first();
+    await opt.scrollIntoViewIfNeeded().catch(() => {});
+    await opt.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(300);
+    val = (await combo.textContent().catch(() => "")) || "";
+    if (val.includes(optionName)) return;
+    await page.waitForTimeout(300);
   }
-  await page.waitForTimeout(400);
+  // 三次均未确认到选中值：抛出，让上方捕获为 run_error，明确暴露赋值失败
+  throw new Error(`selectRadix 未能选中选项「${optionName}」`);
 }
 
 async function launchBrowser() {

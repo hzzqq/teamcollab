@@ -199,7 +199,7 @@ jobs:
       - name: Install Playwright + Chromium
         run: |
           npm install --no-save playwright@1.51.1
-          npx playwright install --with-deps chromium
+          ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Run mainline e2e (Spec §2 验收主线)
         run: node e2e/mainline-e2e.js

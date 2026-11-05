@@ -30,7 +30,6 @@ PORT_A = 18201
 PORT_B = 18202
 REDIS_PORT = 16399
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PSQL = r"E:\project\project4\.pgtmp\pgsql\bin\psql.exe"
 
 PASS = "✅"
 FAIL = "❌"
@@ -86,7 +85,9 @@ def main() -> int:
         "RATE_LIMIT_GENERAL_PER_MINUTE": "1000000",
         "PYTHONUNBUFFERED": "1",
     }
-    python = r"E:\project\project4\server\.venv\Scripts\python.exe"
+    # 用运行本脚本的解释器本身起子进程（CI 是 setup-python 的解释器，本地是本机 venv），
+    # 避免硬编码 Windows venv 路径导致 CI（ubuntu）FileNotFoundError。
+    python = sys.executable
 
     procs = []
     logs: dict[int, list[str]] = {}

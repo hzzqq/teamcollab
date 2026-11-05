@@ -27,6 +27,7 @@ import type {
   Task,
   Team,
   UpdateTaskRequest,
+  UserTeam,
 } from "./api-types";
 
 export class ApiError extends Error {
@@ -169,6 +170,12 @@ export const api = {
     return rawRequest("/api/v1/me", "GET");
   },
 
+  /** 当前用户所属的全部团队及角色（多团队切换用） */
+  async meTeams(): Promise<UserTeam[]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.meTeams());
+    return rawRequest("/api/v1/me/teams", "GET");
+  },
+
   async meTasks(params: { status?: string; q?: string; page?: number; limit?: number } = {}): Promise<Paginated<Task>> {
     if (API_MODE === "mock") return unwrap(await mockApi.meTasks(params));
     const qs = new URLSearchParams();
@@ -182,6 +189,11 @@ export const api = {
   async teamsBoards(teamId: string): Promise<Board[]> {
     if (API_MODE === "mock") return unwrap(await mockApi.teamsBoards(teamId));
     return rawRequest(`/api/v1/teams/${teamId}/boards`, "GET");
+  },
+
+  async createTeam(name: string): Promise<Team> {
+    if (API_MODE === "mock") return unwrap(await mockApi.createTeam(name));
+    return rawRequest("/api/v1/teams", "POST", { body: { name } });
   },
 
   async createBoard(teamId: string, name: string): Promise<Board> {

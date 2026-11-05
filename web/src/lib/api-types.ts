@@ -46,6 +46,12 @@ export interface Team {
   created_at: string;
 }
 
+/** 当前用户所属的团队及其角色（/me/teams） */
+export interface UserTeam {
+  team: Team;
+  role: Role;
+}
+
 export interface AuthTokens {
   access_token: string;
   refresh_token: string;

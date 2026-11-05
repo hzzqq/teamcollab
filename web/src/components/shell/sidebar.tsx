@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronsLeftRight,
+  FolderKanban,
   ListChecks,
   SquareKanban,
   Users,
@@ -12,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useMe } from "@/hooks/use-me";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { TeamSwitcher } from "./team-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,20 +26,25 @@ interface NavItem {
 }
 
 /**
- * 已实现的导航项（DESIGN.md §4.7 的 6 项中，当前 MVP 只落地了这 3 项路由）。
+ * 导航项（对齐 DESIGN.md §4.7 的 6 项）。
  *
- * 设计文档中的「收件箱 / 项目 / 设置」目前没有对应页面：按 PROJECT_BOUNDARY.md
- * 「扩展位 ≠ 现在就做」，不为占位功能新建页面；渲染无路由的导航项则会 404。
- * 待对应页面落地时再补进本列表即可。
+ * - 我的任务 / 看板 / 成员：Spec §7 页面表中的真实页面
+ * - 项目：Spec §2 验收主线里的「项目」即团队实体 —— 本轮补齐为团队列表页
+ *   （此前是死链，点击 404）
+ *
+ * 「收件箱 / 设置」仍不渲染：Spec §7 把通知中心定义为「铃铛 + 下拉面板」全局组件
+ * （已实现在 NotificationBell），无独立页面；「设置」无对应页面与后端端点，
+ * 按 PROJECT_BOUNDARY.md「扩展位 ≠ 现在就做」不建占位页。
  */
 const NAV_ITEMS: NavItem[] = [
   { label: "我的任务", href: "/me/tasks", icon: ListChecks },
+  { label: "项目", href: "/projects", icon: FolderKanban },
   { label: "看板", href: "/boards", icon: SquareKanban },
   { label: "成员", href: "/members", icon: Users },
 ];
 
 /** 把导航项映射到真实路由：
- * - 看板 → /boards（团队看板列表页）
+ * - 看板 → /boards（当前团队的看板列表页）
  * - 成员 → /teams/{teamId}/members（成员管理在团队上下文下）
  */
 function hrefFor(item: NavItem, teamId?: string) {
@@ -67,19 +74,12 @@ export function Sidebar({
       )}
       style={{ width: collapsed ? 64 : 240 }}
     >
-      {/* 顶部：logo + 团队名 + 折叠按钮 */}
+      {/* 顶部：logo + 团队名（可切换）+ 折叠按钮 */}
       <div className={cn("flex h-14 items-center gap-2 border-b border-border px-3", collapsed && "justify-center px-2")}>
         {!collapsed ? (
-          <Link href="/me/tasks" className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary-600 text-xs font-semibold text-white">
-              T
-            </span>
-            <span className="truncate text-sm font-medium text-fg">{isLoading ? "…" : me?.team?.name || "团队"}</span>
-          </Link>
+          <TeamSwitcher collapsed={false} />
         ) : (
-          <span className="flex size-7 items-center justify-center rounded-md bg-primary-600 text-xs font-semibold text-white">
-            T
-          </span>
+          <TeamSwitcher collapsed />
         )}
         {!collapsed ? (
           <Button variant="ghost" size="iconSm" onClick={onToggle} aria-label="折叠侧边栏">

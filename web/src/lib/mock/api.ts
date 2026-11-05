@@ -22,6 +22,7 @@ import type {
   Team,
   UpdateTaskRequest,
   User,
+  UserTeam,
 } from "@/lib/api-types";
 import { seedDb, taskToColumns, type MockDb } from "./data";
 
@@ -92,6 +93,19 @@ export const mockApi = {
     return delay(ok({ user, team: db.teams[0], role: member?.role || "member" }));
   },
 
+  async meTeams(): Promise<ApiEnvelope<UserTeam[]>> {
+    const user = currentUser();
+    const out: UserTeam[] = [];
+    for (const [teamId, members] of Object.entries(db.members)) {
+      const team = db.teams.find((t) => t.id === teamId);
+      if (!team) continue;
+      const m = members.find((x) => x.user.id === user.id);
+      if (!m) continue;
+      out.push({ team, role: m.role });
+    }
+    return delay(ok(out.length > 0 ? out : [{ team: db.teams[0], role: "member" }]));
+  },
+
   async meTasks(params: { status?: string; q?: string; page?: number; limit?: number }): Promise<ApiEnvelope<Paginated<Task>>> {
     const user = currentUser();
     let items = Object.values(db.tasks)
@@ -111,6 +125,39 @@ export const mockApi = {
 
   async teamsBoards(teamId: string): Promise<ApiEnvelope<Board[]>> {
     return delay(ok(db.boards.filter((b) => b.team_id === teamId)));
+  },
+
+  async createTeam(name: string): Promise<ApiEnvelope<Team>> {
+    const team: Team = {
+      id: `t-${++tokenSeq}`,
+      name,
+      created_at: new Date().toISOString(),
+    };
+    db.teams.push(team);
+    // 创建者自动成为 owner（与后端 team_service.create 一致）
+    const user = currentUser();
+    db.members[team.id] = [{ user, role: "owner", created_at: team.created_at }];
+    // 新团队带一组默认列，与建板时一致
+    const board: Board = {
+      id: `b-${++tokenSeq}`,
+      team_id: team.id,
+      name: "默认看板",
+      created_at: team.created_at,
+      updated_at: team.created_at,
+    };
+    db.boards.push(board);
+    db.columns[board.id] = [
+      { id: `c-${tokenSeq}-1`, board_id: board.id, name: "待办", position: 0, created_at: board.created_at, updated_at: board.created_at },
+      { id: `c-${tokenSeq}-2`, board_id: board.id, name: "进行中", position: 1, created_at: board.created_at, updated_at: board.created_at },
+      { id: `c-${tokenSeq}-3`, board_id: board.id, name: "已完成", position: 2, created_at: board.created_at, updated_at: board.created_at },
+    ];
+    db.tasks = {
+      ...db.tasks,
+      [`c-${tokenSeq}-1`]: [],
+      [`c-${tokenSeq}-2`]: [],
+      [`c-${tokenSeq}-3`]: [],
+    };
+    return delay(ok(team));
   },
 
   async createBoard(teamId: string, name: string): Promise<ApiEnvelope<Board>> {

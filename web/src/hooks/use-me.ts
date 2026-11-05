@@ -1,7 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { resolveActiveTeam, useMyTeams } from "@/hooks/use-teams";
 import type { Role, Team, User } from "@/lib/api-types";
 
 export interface MeData {
@@ -10,13 +12,54 @@ export interface MeData {
   role: Role;
 }
 
-/** 当前用户 + 团队 + 角色（应用外壳/权限判断共用） */
+/**
+ * 当前用户 + 当前生效团队 + 角色。
+ *
+ * 用户身份来自 /me；团队与角色来自 /me/teams（支持多团队切换：
+ * 手动选中的团队存 localStorage，若已不在成员列表中自动回落第一个团队）。
+ *
+ * 注意：/me 的 team 字段固定取「加入最早的团队」，无法表达用户当前选择，
+ * 因此这里的 team/role 一律以 /me/teams 的解析结果为准。
+ */
 export function useMe() {
-  return useQuery({
+  const qc = useQueryClient();
+  const meQuery = useQuery({
     queryKey: ["me"],
-    queryFn: async (): Promise<MeData> => api.me(),
+    queryFn: async (): Promise<{ user: User }> => {
+      const res = await api.me();
+      return { user: res.user };
+    },
     staleTime: 5 * 60_000,
   });
+  const teamsQuery = useMyTeams();
+
+  const active = resolveActiveTeam(teamsQuery.data);
+  const team: Team | undefined = active
+    ? teamsQuery.data?.find((t) => t.team.id === active.teamId)?.team
+    : undefined;
+
+  // 切换团队后旧团队的缓存（看板/成员/任务）不再适用 → 清理，
+  // 避免切回旧团队时读到陈旧数据。
+  const activeTeamId = team?.id;
+  const prevTeamIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevTeamIdRef.current;
+    prevTeamIdRef.current = activeTeamId;
+    if (!prev || !activeTeamId || prev === activeTeamId) return;
+    qc.removeQueries({ queryKey: ["boards", prev] });
+    qc.removeQueries({ queryKey: ["members", prev] });
+    qc.removeQueries({ queryKey: ["board"] });
+  }, [activeTeamId, qc]);
+
+  return {
+    ...meQuery,
+    data: meQuery.data && team ? { user: meQuery.data.user, team, role: active!.role } : undefined,
+    isLoading: meQuery.isLoading || teamsQuery.isLoading,
+    isError: meQuery.isError || teamsQuery.isError,
+    refetch: async () => {
+      await Promise.all([meQuery.refetch(), teamsQuery.refetch()]);
+    },
+  };
 }
 
 /** 当前角色是否可写（member+ 可编辑；viewer 只读） */

@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ListChecks, SquareKanban, Users, type LucideIcon } from "lucide-react";
+import { FolderKanban, ListChecks, SquareKanban, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMe } from "@/hooks/use-me";
 
@@ -13,11 +13,12 @@ interface TabItem {
 }
 
 /**
- * 已实现的底部导航项（与 Sidebar 的 NAV_ITEMS 保持一致）。
- * DESIGN.md §4.7 的「收件箱 / 项目 / 设置」当前无对应路由，按边界宪法不建占位页面。
+ * 底部导航项（与 Sidebar 的 NAV_ITEMS 保持一致，≤5 项 DESIGN.md §4.7）。
+ * 「项目」即团队列表页（Spec §2 的「项目」= 团队实体）。
  */
 const TABS: TabItem[] = [
   { label: "我的任务", href: "/me/tasks", icon: ListChecks },
+  { label: "项目", href: "/projects", icon: FolderKanban },
   { label: "看板", href: "/boards", icon: SquareKanban },
   { label: "成员", href: "/members", icon: Users },
 ];

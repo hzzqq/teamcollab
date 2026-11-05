@@ -78,6 +78,11 @@ jobs:
           python scripts/e2e_smoke.py
           kill $UVICORN_PID
 
+      - name: 多实例三件套验证（跨进程 SSE 广播 / 限流共享计数 / 调度器互斥）
+        # 用内置的最小 Redis 协议服务端替代真实 Redis：
+        # 真 TCP + 真多进程 + 真 redis-py 客户端，验证的是应用层行为而非 mock。
+        run: python scripts/multi_instance_verify.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

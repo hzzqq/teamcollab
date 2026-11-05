@@ -83,11 +83,46 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 ## 验证状态（2026-11-05）
 
 - 后端：pytest **115 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**）
-- 前端：tsc 0 错误、ESLint 0 警告、**单元测试 12/12**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
+- 前端：tsc 0 错误、ESLint 0 警告、**单元测试 17/17**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
 - 拖拽契约：前后端共用同一套落位语义 —— 路径 `columnId` = **目标列**；`server/tests/test_drag_contract.py`（10 例）与 `web/tests/drag-position.test.mjs`（12 例）互为对照，任一方改动契约必红
 - API e2e 冒烟（`scripts/e2e_smoke.py`，真实起服）：覆盖注册/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/RBAC/SSE/CORS/到期提醒
-- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + pytest + e2e；frontend：npm ci + tsc + lint + test + build）
+- **多实例三件套验证**（`scripts/multi_instance_verify.py`，跨进程真实验证）：SSE 广播跨实例 / 限流计数跨实例共享 / 超限跨实例生效 / 调度器 advisory lock 互斥 —— 全部通过
+- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + pytest + e2e + 多实例验证；frontend：npm ci + tsc + lint + test + build）
 - P0 门禁：全代码 emoji 零容忍、无紫粉渐变、图标 lucide 唯一
+
+## 多租户与多团队
+
+| 项 | 说明 | 落地位置 |
+|----|------|---------|
+| 当前团队 | `/me` 的 team 固定取「加入最早的团队」，无法表达用户选择 → 团队与角色改由 `/me/teams` 解析 | `web/src/hooks/use-me.ts` |
+| 团队切换 | 侧栏顶部团队名可切换；选择存 localStorage；已不在成员列表中自动回落第一个团队 | `web/src/lib/active-team.ts` + `components/shell/team-switcher.tsx` |
+| 项目列表页 | Spec §2 的「项目」= 团队实体 → `/projects` 列出全部所属团队，可新建团队 | `web/src/app/(app)/projects/page.tsx` |
+| 缓存隔离 | 切换团队后清理旧团队的看板/成员/详情缓存，避免切回时读到陈旧数据 | `use-me.ts`（`removeQueries`） |
+
+> 「收件箱 / 设置」仍不作为独立页面：Spec §7 把通知中心定义为「铃铛 + 下拉面板」全局组件（已实现），
+> 「设置」无对应页面与后端端点，按 `PROJECT_BOUNDARY.md`「扩展位 ≠ 现在就做」不建占位页。
+
+## 多实例运行时验证（无 Docker 环境下的等价验证）
+
+生产部署依赖 Docker 全栈（nginx + web + api×2 + pg + redis）。本机无 Docker daemon 时，
+可用内置的**最小 Redis 协议服务端**做等价的**跨进程**验证：
+
+```bash
+cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
+```
+
+- `scripts/mini_redis.py`：实现项目用到的 Redis 命令子集（INCR/EXPIRE/PUBLISH/PSUBSCRIBE/MULTI/EXEC…），
+  与真实 `redis-py` 客户端完全互通
+- `scripts/multi_instance_verify.py`：拉起 **2 个真实 uvicorn 进程** + mini-redis，验证
+  ① SSE 广播跨实例（A 发布 → B 的订阅者收到）
+  ② 限流计数跨实例共享（A 3 次 + B 3 次 = 全局 6）
+  ③ 超限判定跨实例生效（A 占满 → B 立刻被拒）
+  ④ 调度器 advisory lock 互斥
+- 已接入 CI（ubuntu job），本地与 CI 行为一致
+
+> 为什么需要它：compose 的多实例形态依赖 Redis 广播 + 共享计数，这两点在单实例内存实现下无法验证。
+> 本机 Docker daemon 不可用（Docker Desktop 依赖 `wsl.exe`，被宿主安全策略拦截），
+> 故用真实 TCP + 真实多进程 + 真实 redis-py 客户端替代 Docker 做等价验证。
 
 ## 拖拽落位契约（前后端唯一真相源）
 

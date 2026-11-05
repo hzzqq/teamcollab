@@ -31,6 +31,27 @@ function check(name, ok, detail = "") {
 const shot = (page, name) =>
   page.screenshot({ timeout: 10000, animations: "disabled", path: `${SHOT_DIR}/${name}.png` }).catch(() => {});
 
+// Radix Select 在 Playwright 下的稳定选择：选项渲染在 portal 且外层可能处于
+// 开合动画中，默认 click 的可见性/稳定性检查会超时（CI 实测 step7 卡 30s）。
+// 这里先滚动到位 + 强制点击 + 重试，规避动画不稳定与潜在遮挡。
+async function selectRadix(page, labelLocator, optionName) {
+  const combo = labelLocator.locator('[role="combobox"]');
+  await combo.click();
+  const opt = page.getByRole("option", { name: optionName }).first();
+  await opt.waitFor({ state: "visible", timeout: 10000 });
+  let ok = false;
+  for (let i = 0; i < 3 && !ok; i++) {
+    try {
+      await opt.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+      await opt.click({ force: true, timeout: 5000 });
+      ok = true;
+    } catch {
+      await page.waitForTimeout(400);
+    }
+  }
+  await page.waitForTimeout(400);
+}
+
 async function launchBrowser() {
   const args = ["--no-sandbox", "--disable-gpu", "--window-size=1440,900"];
   if (fs.existsSync(EDGE)) {
@@ -126,9 +147,8 @@ async function launchBrowser() {
     // CSS 定位：Radix 弹层关闭时可能残留 aria-hidden，getByRole 会被 a11y 树过滤
     const drawer = pm.locator('div[role="dialog"][aria-label="任务详情"]');
     await drawer.waitFor({ timeout: 10000 });
-    await drawer.locator("label", { hasText: "负责人" }).locator('[role="combobox"]').click();
-    await pm.getByRole("option", { name: "主线成员" }).click();
-    await pm.waitForTimeout(600);
+    await pm.waitForTimeout(400); // 等抽屉开启动画稳定，避免 Radix 弹层遮挡选项
+    await selectRadix(pm, drawer.locator("label", { hasText: "负责人" }), "主线成员");
     const due = new Date();
     const iso = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
     await drawer.locator('input[type="date"]').fill(iso);
@@ -170,9 +190,8 @@ async function launchBrowser() {
     check("member_notification_navigates_to_task", true);
 
     // ===== 9. 成员更新状态 → 进行中 =====
-    await mDrawer.locator("label", { hasText: "状态" }).locator('[role="combobox"]').click();
-    await member.getByRole("option", { name: "进行中" }).click();
-    await member.waitForTimeout(1200);
+    await selectRadix(member, mDrawer.locator("label", { hasText: "状态" }), "进行中");
+    await member.waitForTimeout(800);
     const statusShown = await mDrawer.locator("label", { hasText: "状态" }).textContent();
     check("member_status_updated", (statusShown || "").includes("进行中"), statusShown || "");
     await shot(member, "m5-member-status-in-progress");

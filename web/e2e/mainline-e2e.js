@@ -163,7 +163,8 @@ async function launchBrowser() {
       await member.waitForFunction(
         () => {
           const el = document.querySelector('button[aria-label*="条未读"]');
-          return el && !/0 条未读/.test(el.getAttribute("aria-label") || "");
+          const m = el && (el.getAttribute("aria-label") || "").match(/(\d+)\s*条未读/);
+          return m && parseInt(m[1], 10) > 0;
         },
         { timeout: 15000 },
       );
@@ -172,10 +173,36 @@ async function launchBrowser() {
       await member.reload(NAV);
       await member.waitForTimeout(2000);
     }
-    const bell = member.locator('button[aria-label*="条未读"]').first();
-    check("member_notification_received", (await bell.count()) > 0, realtime ? "SSE 实时推送" : "刷新后可见");
-    await bell.click();
-    await member.waitForSelector("text=你被分配了任务", { timeout: 8000 });
+    // 真正校验未读数 > 0（旧判定只看 bell 是否存在，0 条也会误判为收到）
+    const unreadTxt = await member
+      .locator('button[aria-label*="条未读"]')
+      .first()
+      .getAttribute("aria-label")
+      .catch(() => "");
+    const unreadN = parseInt((unreadTxt || "").match(/(\d+)\s*条未读/)?.[1] || "0", 10);
+    check("member_notification_received", unreadN > 0, realtime ? `SSE 实时推送 unread=${unreadN}` : `刷新后可见 unread=${unreadN}`);
+
+    // 打开通知下拉。Radix 下拉渲染在 portal 且带淡入动画，纯 text= 选择器偶发超时；
+    // 这里等 role=menu 真正出现后，直接读 DOM textContent 判断通知是否到位，并做一次
+    // reload 兜底重试（覆盖 SSE/轮询回填早于下拉打开的竞态）。
+    async function openAndFindNotif() {
+      const bell = member.locator('button[aria-label*="条未读"]').first();
+      await bell.click();
+      await member.waitForSelector('[role="menu"]', { timeout: 8000 });
+      await member.waitForFunction(
+        () => (document.querySelector('[role="menu"]')?.textContent || "").includes("你被分配了任务"),
+        { timeout: 12000 },
+      );
+    }
+    try {
+      await openAndFindNotif();
+    } catch {
+      await member.reload(NAV);
+      await member.waitForTimeout(2500);
+      await openAndFindNotif();
+    }
+    const ddText = await member.locator('[role="menu"]').first().textContent();
+    check("member_notification_has_assigned", (ddText || "").includes("你被分配了任务"), ddText?.slice(0, 60) || "");
     await shot(member, "m4-member-notification");
     await member
       .getByRole("button", { name: new RegExp(escapeRe(`你被分配了任务「${TASK}」`)) })

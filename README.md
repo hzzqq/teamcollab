@@ -83,7 +83,7 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 ## 验证状态（2026-11-05）
 
 - 后端：pytest **127 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**/**列删除非空保护**）
-- 前端：tsc 0 错误、ESLint 0 警告、**单元测试 22/22**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
+- 前端：tsc 0 错误、ESLint 0 警告、**单元测试 25/25**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
 - 拖拽契约：前后端共用同一套落位语义 —— 路径 `columnId` = **目标列**；`server/tests/test_drag_contract.py`（10 例）与 `web/tests/drag-position.test.mjs`（12 例）互为对照，任一方改动契约必红
 - API e2e 冒烟（`server/scripts/e2e_smoke.py`，真实起服）：覆盖注册/登录/**me/me-teams/创建团队**/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/我的任务/通知/RBAC/SSE/CORS/到期提醒 —— **26/26 全绿**
 - **多实例三件套验证**（`server/scripts/multi_instance_verify.py`，跨进程真实验证）：SSE 广播跨实例 / 限流计数跨实例共享 / 超限跨实例生效 / 调度器 advisory lock 互斥 —— 全部通过
@@ -150,7 +150,7 @@ cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
 | 标签 CRUD | `GET/POST/PUT/DELETE /teams/{teamId}/labels`，写操作限 **admin+** | `server/app/api/v1/labels.py` |
 | 任务标签赋值 | `PUT /tasks/{taskId}/labels`（整体覆盖），限 **member+**；创建/更新/PATCH 任务均可带 `label_ids`，均做「标签须属本团队」校验 | `label_service.set_task_labels` / `task_service` |
 | 列表过滤 | `GET /boards/{boardId}/tasks` 新增 `priority`、`label_id` 查询参数 | `task_repo.list_by_board` |
-| 前端三通道 | `api-types / api / mock` 同步补齐类型与方法；抽屉内标签多选 + 卡片标签芯片 + 看板顶部「标签 + 优先级」筛选条（筛选态禁用拖拽以保护落位契约） | `web/src/{lib,hooks,components}` |
+| 前端三通道 | `api-types / api / mock` 同步补齐类型与方法；抽屉内标签多选 + 卡片标签芯片 + 看板顶部「标签 + 优先级 + 负责人」筛选条（筛选态禁用拖拽以保护落位契约） | `web/src/{lib,hooks,components}` |
 
 > 关键坑：`Task.labels` 用 `lazy="raise"`，列表查询须 `selectinload`（避免 joinedload 行膨胀 `.unique()` 报错）；提交后须 `db.refresh(task, ["labels"])` 刷新集合，否则 identity map 复用陈旧空集合导致返回空标签。
 

@@ -52,6 +52,29 @@ test("filterTasks: 标签 + 优先级联合过滤（AND）", () => {
 
 test("isFilterActive: 空筛选为 false", () => {
   assert.equal(isFilterActive(EMPTY_FILTER), false);
-  assert.equal(isFilterActive({ labelId: "x", priority: null }), true);
-  assert.equal(isFilterActive({ labelId: null, priority: "urgent" }), true);
+  assert.equal(isFilterActive({ labelId: "x", priority: null, assigneeId: null }), true);
+  assert.equal(isFilterActive({ labelId: null, priority: "urgent", assigneeId: null }), true);
+  assert.equal(isFilterActive({ labelId: null, priority: null, assigneeId: "u1" }), true);
+});
+
+test("filterTasks: 按负责人过滤", () => {
+  const tasks = [T("a", { assignee_id: "u1" }), T("b", { assignee_id: "u2" }), T("c", { assignee_id: null })];
+  const out = filterTasks(tasks, { labelId: null, priority: null, assigneeId: "u1" });
+  assert.deepEqual(out.map((t) => t.id), ["a"]);
+});
+
+test("filterTasks: 负责人 + 标签 + 优先级三条件联合（AND）", () => {
+  const tasks = [
+    T("a", { assignee_id: "u1", priority: "high", labels: [L("lb1")] }),
+    T("b", { assignee_id: "u1", priority: "high", labels: [L("lb2")] }),
+    T("c", { assignee_id: "u2", priority: "high", labels: [L("lb1")] }),
+    T("d", { assignee_id: "u1", priority: "low", labels: [L("lb1")] }),
+  ];
+  const out = filterTasks(tasks, { labelId: "lb1", priority: "high", assigneeId: "u1" });
+  assert.deepEqual(out.map((t) => t.id), ["a"]);
+});
+
+test("filterTasks: 负责人为 null 表示不限（与空筛选一致）", () => {
+  const tasks = [T("a", { assignee_id: "u1" }), T("b", { assignee_id: null })];
+  assert.deepEqual(filterTasks(tasks, { labelId: null, priority: null, assigneeId: null }).map((t) => t.id), ["a", "b"]);
 });

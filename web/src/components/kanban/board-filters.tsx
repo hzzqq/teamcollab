@@ -4,6 +4,7 @@ import { Filter, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useLabels } from "@/hooks/use-labels";
+import { useMembers } from "@/hooks/use-members";
 import { isFilterActive, type BoardFilter } from "@/lib/board-filter";
 import type { Priority } from "@/lib/api-types";
 
@@ -14,7 +15,7 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: "urgent", label: "紧急" },
 ];
 
-/** 看板客户侧筛选条：按标签 + 优先级过滤（不影响已加载数据，筛选时不拖拽）。 */
+/** 看板客户侧筛选条：按标签 + 优先级 + 负责人过滤（不影响已加载数据，筛选时不拖拽）。 */
 export function BoardFilters({
   teamId,
   filter,
@@ -25,6 +26,7 @@ export function BoardFilters({
   onChange: (f: BoardFilter) => void;
 }) {
   const { data: labels } = useLabels(teamId);
+  const { data: members } = useMembers(teamId);
   const active = isFilterActive(filter);
 
   return (
@@ -64,12 +66,28 @@ export function BoardFilters({
           ))}
         </SelectContent>
       </Select>
+      <Select
+        value={filter.assigneeId ?? "all"}
+        onValueChange={(v) => onChange({ ...filter, assigneeId: v === "all" ? null : v })}
+      >
+        <SelectTrigger className="h-8 w-[140px] text-xs">
+          <SelectValue placeholder="全部负责人" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部负责人</SelectItem>
+          {(members || []).map((m) => (
+            <SelectItem key={m.user.id} value={m.user.id}>
+              {m.user.display_name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {active ? (
         <Button
           variant="ghost"
           size="sm"
           className="h-8"
-          onClick={() => onChange({ labelId: null, priority: null })}
+          onClick={() => onChange({ labelId: null, priority: null, assigneeId: null })}
         >
           <X size={14} strokeWidth={1.5} /> 清除
         </Button>

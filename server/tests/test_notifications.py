@@ -149,3 +149,55 @@ def test_mark_all_read(client, team_with_members):
     r = client.post("/api/v1/notifications/read-all", headers=member["headers"])
     assert r.json()["data"]["updated"] == 0
 
+
+def test_mark_one_read_flips_only_that_item(client, team_with_members):
+    """单条已读：只翻转目标通知，其余未读保持不变。"""
+    t = team_with_members
+    member = t["member"]
+
+    # 再建一个指派给 member 的任务，确保存在 ≥2 条未读通知
+    resp = client.post(
+        f"/api/v1/boards/{t['board']['id']}/tasks",
+        json={
+            "title": "第二条未读通知来源",
+            "column_id": t["columns"][0],
+            "assignee_id": member["user"]["id"],
+        },
+        headers=t["owner"]["headers"],
+    )
+    assert resp.status_code == 201
+
+    # 取两条未读
+    r = client.get("/api/v1/notifications?unread=true", headers=member["headers"])
+    items = r.json()["data"]["items"]
+    assert len(items) >= 2, "fixture 应产生至少 2 条未读通知"
+    target, other = items[0], items[1]
+
+    r = client.post(f"/api/v1/notifications/{target['id']}/read", headers=member["headers"])
+    assert r.status_code == 200
+    assert r.json()["data"]["ok"] is True
+
+    # 目标已读、其他仍未读
+    r = client.get("/api/v1/notifications", headers=member["headers"])
+    by_id = {n["id"]: n for n in r.json()["data"]["items"]}
+    assert by_id[target["id"]]["is_read"] is True
+    assert by_id[other["id"]]["is_read"] is False
+
+
+def test_mark_one_read_rejects_other_user(client, team_with_members):
+    """跨用户隔离：标记他人通知 → 40401（不泄露存在性）。"""
+    t = team_with_members
+    member = t["member"]
+
+    r = client.get("/api/v1/notifications", headers=member["headers"])
+    notif_id = r.json()["data"]["items"][0]["id"]
+
+    # owner 尝试标记 member 的通知 → 不存在（租户隔离）
+    r = client.post(f"/api/v1/notifications/{notif_id}/read", headers=t["owner"]["headers"])
+    assert r.status_code == 404
+    assert r.json()["code"] == 40401
+
+    # 未登录 → 401
+    r = client.post(f"/api/v1/notifications/{notif_id}/read")
+    assert r.status_code == 401
+

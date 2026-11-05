@@ -82,7 +82,7 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 
 ## 验证状态（2026-11-05）
 
-- 后端：pytest **127 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**/**列删除非空保护**）
+- 后端：pytest **129 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**/**列删除非空保护**/**通知单条已读（含跨用户隔离 404）**）
 - 前端：tsc 0 错误、ESLint 0 警告、**单元测试 25/25**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
 - 拖拽契约：前后端共用同一套落位语义 —— 路径 `columnId` = **目标列**；`server/tests/test_drag_contract.py`（10 例）与 `web/tests/drag-position.test.mjs`（12 例）互为对照，任一方改动契约必红
 - API e2e 冒烟（`server/scripts/e2e_smoke.py`，真实起服）：覆盖注册/登录/**me/me-teams/创建团队**/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/我的任务/通知/RBAC/SSE/CORS/到期提醒 —— **26/26 全绿**
@@ -170,6 +170,19 @@ cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
 
 > 关键设计：删除列**不级联删任务**，而是 409 引导用户先清空/移动任务——协作场景下任务数据比列结构更关键，
 > 静默丢失不可接受。这与「删除看板级联删列与任务」（`ON DELETE CASCADE` 由 board→column→task 三段 FK 触发）形成明确分级：删看板是整体性销毁（确认后级联），删单列只动结构。
+
+## 通知中心增强 + 收尾打磨（2026-11-06 批次）
+
+协作 SaaS 范畴内的体验加固，未触碰边界禁区。
+
+| 项 | 约定 | 落地位置 |
+|----|------|---------|
+| 单条通知已读 | `POST /notifications/{id}/read`，登录态，限定属主（跨用户 → 40401，不泄露存在性）；未读项点击即乐观标记已读、未读角标 -1 | `notification_repo.mark_one_read` + `require` + `useMarkOneRead` + `notification-bell.tsx` `handleOpen` |
+| 后端测试 | +2 例：单条翻转只影响目标 / 跨用户隔离 404 + 未登录 401 | `server/tests/test_notifications.py` |
+| 空态/错误态文案复核 | 全站 EmptyState / error.tsx / not-found.tsx 文案均含实际指导（符合 PRD §10），无占位/空泛文案，本轮无改动 | `web/src/app/**` |
+| 大看板虚拟滚动 | **暂未实施**：Spec §9 仅 >1000 任务/看板触发；当前数据量远低于阈值，且 dnd-kit 虚拟化集成脆弱、易回归拖拽契约，属投机代码；待数据量真实逼近阈值时再按 `@tanstack/react-virtual` + 活跃拖拽项保序方案落地 | 决策记录 |
+
+> 边界自检：本批次仅做通知中心既有页面的交互完善与文案复核，未引入任何 Backlog（F6–F12）功能，符合 `PROJECT_BOUNDARY.md` 锁定范围。
 
 ## 已修复的关键缺陷（2026-11-05 评审批次）
 

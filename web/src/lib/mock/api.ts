@@ -437,4 +437,11 @@ export const mockApi = {
     db.notifications = db.notifications.map((n) => ({ ...n, is_read: true }));
     return delay(ok({ ok: true, updated }));
   },
+
+  async markOneRead(notificationId: string): Promise<ApiEnvelope<{ ok: boolean }>> {
+    db.notifications = db.notifications.map((n) =>
+      n.id === notificationId ? { ...n, is_read: true } : n
+    );
+    return delay(ok({ ok: true }));
+  },
 };

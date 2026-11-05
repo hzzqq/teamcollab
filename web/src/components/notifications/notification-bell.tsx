@@ -11,7 +11,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
-import { useNotifications, useMarkAllRead } from "@/hooks/use-notifications";
+import { useNotifications, useMarkAllRead, useMarkOneRead } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -51,10 +51,15 @@ export function NotificationBell() {
   const router = useRouter();
   const { data, isLoading, isError, refetch } = useNotifications();
   const markAllReadMutation = useMarkAllRead();
+  const markOneReadMutation = useMarkOneRead();
   // 未读数：优先用服务端 total（仅未读过滤），避免只统计已加载的 20 条
   const unread = data?.unreadTotal ?? data?.items.filter((n) => !n.is_read).length ?? 0;
 
   function handleOpen(n: NotificationItem) {
+    // 点击即标记该条为已读（未读项才发请求，避免无谓写）
+    if (!n.is_read) {
+      markOneReadMutation.mutate(n.id);
+    }
     const boardId = String(n.payload?.board_id || "");
     const taskId = String(n.payload?.task_id || "");
     if (boardId) {

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, Query
@@ -82,3 +83,18 @@ def mark_all_read(
 ):
     updated = notification_service.mark_all_read(db, user.id)
     return {"code": 0, "data": {"ok": True, "updated": updated}, "message": ""}
+
+
+@router.post("/notifications/{notification_id}/read", response_model=OkResponse)
+def mark_one_read(
+    notification_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """单条通知置已读（限定属主）。不存在/非本人 → 40401（不区分以免泄露存在性）。"""
+    updated = notification_service.mark_one_read(db, user.id, notification_id)
+    if not updated:
+        from app.core.errors import not_found
+
+        raise not_found("通知不存在")
+    return {"code": 0, "data": {"ok": True}, "message": ""}

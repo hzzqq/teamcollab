@@ -66,6 +66,21 @@ class NotificationRepo:
         )
         return result.rowcount or 0
 
+    def mark_one_read(
+        self, db: Session, user_id: uuid.UUID, notification_id: uuid.UUID
+    ) -> bool:
+        """标记某条通知为已读，限定属主（租户隔离）。命中并返回 True，否则 False（含不存在/非本人）。"""
+        result = db.execute(
+            update(Notification)
+            .where(
+                Notification.id == notification_id,
+                Notification.user_id == user_id,
+                Notification.is_read.is_(False),
+            )
+            .values(is_read=True)
+        )
+        return (result.rowcount or 0) > 0
+
     def exists_unread_due_soon(self, db: Session, user_id: uuid.UUID, task_id: uuid.UUID) -> bool:
         """幂等去重：同 task + task_due_soon + 未读 已存在则跳过。"""
         row = db.scalar(

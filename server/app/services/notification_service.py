@@ -64,5 +64,13 @@ class NotificationService:
         db.commit()
         return updated
 
+    def mark_one_read(
+        self, db: Session, user_id: uuid.UUID, notification_id: uuid.UUID
+    ) -> bool:
+        """单条通知置已读（限定属主）；命中返回 True，否 False。"""
+        updated = notification_repo.mark_one_read(db, user_id, notification_id)
+        db.commit()
+        return updated
+
 
 notification_service = NotificationService()

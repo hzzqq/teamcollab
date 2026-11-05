@@ -49,6 +49,39 @@ export function useMarkAllRead() {
   });
 }
 
+/** 单条标记已读（乐观更新 + 失败回滚；错误提示由全局 mutation onError 负责） */
+export function useMarkOneRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) => api.markOneRead(notificationId),
+    onMutate: async (notificationId: string) => {
+      await qc.cancelQueries({ queryKey: notificationsQueryKey() });
+      const previous = qc.getQueryData<PaginatedNotifications>(notificationsQueryKey());
+      qc.setQueryData<PaginatedNotifications>(notificationsQueryKey(), (old) => {
+        if (!old) return old;
+        const target = old.items.find((n) => n.id === notificationId);
+        const wasUnread = target && !target.is_read;
+        return {
+          ...old,
+          unreadTotal: wasUnread ? Math.max(0, old.unreadTotal - 1) : old.unreadTotal,
+          items: old.items.map((n) =>
+            n.id === notificationId ? { ...n, is_read: true } : n
+          ),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(notificationsQueryKey(), context.previous);
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: notificationsQueryKey() });
+    },
+  });
+}
+
 /**
  * SSE 实时通知订阅（AC-05/AC-07 通知推送）
  * - real 模式：EventSource（query token）

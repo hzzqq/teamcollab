@@ -304,6 +304,12 @@ export const api = {
     return rawRequest("/api/v1/notifications/read-all", "POST");
   },
 
+  /** 单条通知置已读（限定属主，后端校验） */
+  async markOneRead(notificationId: string): Promise<{ ok: boolean }> {
+    if (API_MODE === "mock") return unwrap(await mockApi.markOneRead(notificationId));
+    return rawRequest(`/api/v1/notifications/${notificationId}/read`, "POST");
+  },
+
   /** 团队标签列表（viewer+） */
   async labels(teamId: string): Promise<Label[]> {
     if (API_MODE === "mock") return unwrap(await mockApi.labels(teamId));

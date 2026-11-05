@@ -18,9 +18,9 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, CalendarClock } from "lucide-react";
-import { useBoard, useMoveTask, useCreateTask, useCreateColumn } from "@/hooks/use-board";
-import { useMe, canWrite } from "@/hooks/use-me";
+import { GripVertical, Plus, CalendarClock, Check, X, Pencil, Trash2 } from "lucide-react";
+import { useBoard, useMoveTask, useCreateTask, useCreateColumn, useUpdateColumn, useDeleteColumn } from "@/hooks/use-board";
+import { useMe, canWrite, canAdmin } from "@/hooks/use-me";
 import { computeMoveTarget } from "@/lib/drag-position";
 import { dueState, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -51,9 +51,12 @@ export function KanbanBoard({
   const { data: board, isLoading } = useBoard(boardId);
   const { data: me } = useMe();
   const writable = canWrite(me?.role);
+  const admin = canAdmin(me?.role);
   const moveTask = useMoveTask(boardId);
   const createTask = useCreateTask(boardId);
   const createColumn = useCreateColumn(boardId);
+  const updateColumn = useUpdateColumn(boardId);
+  const deleteColumn = useDeleteColumn(boardId);
 
   // 筛选激活时关闭拖拽：避免 SortableContext 项与全量列错位导致落位计算错误（保护拖拽契约）
   const filtering = filter ? isFilterActive(filter) : false;
@@ -99,10 +102,15 @@ export function KanbanBoard({
             key={col.id}
             column={filter ? { ...col, tasks: filterTasks(col.tasks, filter) } : col}
             writable={writable}
+            admin={admin}
             dragDisabled={filtering}
             onOpenTask={onOpenTask}
             onAddTask={(title) => createTask.mutate({ column_id: col.id, title, priority: "medium" })}
             isPending={createTask.isPending}
+            onRenameColumn={(columnId, name) => updateColumn.mutate({ columnId, req: { name } })}
+            onDeleteColumn={(columnId) => deleteColumn.mutate(columnId)}
+            renamePending={updateColumn.isPending}
+            deletePending={deleteColumn.isPending}
           />
         ))}
 
@@ -159,34 +167,107 @@ export function KanbanBoard({
 function Column({
   column,
   writable,
+  admin,
   dragDisabled,
   onOpenTask,
   onAddTask,
   isPending,
+  onRenameColumn,
+  onDeleteColumn,
+  renamePending,
+  deletePending,
 }: {
   column: BoardColumnWithTasks;
   writable: boolean;
+  admin: boolean;
   dragDisabled: boolean;
   onOpenTask: (taskId: string) => void;
   onAddTask: (title: string) => void;
   isPending: boolean;
+  onRenameColumn: (columnId: string, name: string) => void;
+  onDeleteColumn: (columnId: string) => void;
+  renamePending: boolean;
+  deletePending: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(column.name);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  function startEdit() {
+    setDraftName(column.name);
+    setEditing(true);
+  }
+
+  function saveEdit() {
+    const trimmed = draftName.trim();
+    if (trimmed && trimmed !== column.name) onRenameColumn(column.id, trimmed);
+    setEditing(false);
+  }
 
   return (
     <div className="flex w-[272px] shrink-0 flex-col rounded-lg bg-surface-warm dark:bg-surface">
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-fg">{column.name}</span>
+          {editing ? (
+            <Input
+              autoFocus
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              className="h-7 w-32 text-sm"
+            />
+          ) : (
+            <span className="text-sm font-medium text-fg">{column.name}</span>
+          )}
           <span className="text-xs text-meta">{column.tasks.length}</span>
         </div>
-        {writable ? (
-          <Button variant="ghost" size="iconSm" onClick={() => setAdding((v) => !v)} aria-label="新建任务">
-            <Plus size={16} strokeWidth={1.5} />
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-0.5">
+          {editing ? (
+            <>
+              <Button variant="ghost" size="iconSm" onClick={saveEdit} disabled={renamePending || !draftName.trim()} aria-label="保存列名">
+                <Check size={15} strokeWidth={1.5} />
+              </Button>
+              <Button variant="ghost" size="iconSm" onClick={() => setEditing(false)} aria-label="取消编辑">
+                <X size={15} strokeWidth={1.5} />
+              </Button>
+            </>
+          ) : (
+            <>
+              {writable ? (
+                <Button variant="ghost" size="iconSm" onClick={() => setAdding((v) => !v)} aria-label="新建任务">
+                  <Plus size={16} strokeWidth={1.5} />
+                </Button>
+              ) : null}
+              {writable ? (
+                <Button variant="ghost" size="iconSm" onClick={startEdit} aria-label="重命名列">
+                  <Pencil size={14} strokeWidth={1.5} />
+                </Button>
+              ) : null}
+              {admin ? (
+                confirmingDelete ? (
+                  <span className="flex items-center gap-1">
+                    <Button variant="ghost" size="iconSm" className="text-danger hover:bg-danger/10" onClick={() => onDeleteColumn(column.id)} disabled={deletePending} aria-label="确认删除列">
+                      <Check size={14} strokeWidth={1.5} />
+                    </Button>
+                    <Button variant="ghost" size="iconSm" onClick={() => setConfirmingDelete(false)} aria-label="取消删除列">
+                      <X size={14} strokeWidth={1.5} />
+                    </Button>
+                  </span>
+                ) : (
+                  <Button variant="ghost" size="iconSm" className="text-danger hover:bg-danger/10" onClick={() => setConfirmingDelete(true)} aria-label="删除列">
+                    <Trash2 size={14} strokeWidth={1.5} />
+                  </Button>
+                )
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
 
       <div ref={setNodeRef} className="flex min-h-20 flex-1 flex-col gap-2 px-2 pb-2">

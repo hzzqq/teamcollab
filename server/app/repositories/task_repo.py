@@ -77,6 +77,10 @@ class TaskRepo:
             )
         )
 
+    def count_by_column(self, db: Session, column_id: uuid.UUID) -> int:
+        """列内任务数（删除列前的非空保护用，避免 ON DELETE CASCADE 静默删任务）。"""
+        return db.scalar(select(func.count()).select_from(Task).where(Task.column_id == column_id)) or 0
+
     def list_by_columns(self, db: Session, column_ids: list[uuid.UUID]) -> list[Task]:
         """看板详情批量加载（避免 N+1），按列 + position 排序。"""
         if not column_ids:

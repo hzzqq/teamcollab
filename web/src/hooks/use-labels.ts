@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { Label } from "@/lib/api-types";
+import type { Label, LabelColor, UpdateLabelRequest } from "@/lib/api-types";
 
 export function labelsQueryKey(teamId: string) {
   return ["labels", teamId];
@@ -28,6 +28,34 @@ export function useAssignTaskLabels(boardId: string) {
       qc.invalidateQueries({ queryKey: ["task", vars.taskId] });
       qc.invalidateQueries({ queryKey: ["me-tasks"] });
     },
+  });
+}
+
+/** 新建标签（admin+） */
+export function useCreateLabel(teamId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: { name: string; color?: LabelColor }) => api.createLabel(teamId, req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: labelsQueryKey(teamId) }),
+  });
+}
+
+/** 更新标签（admin+，重命名 / 改色） */
+export function useUpdateLabel(teamId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ labelId, req }: { labelId: string; req: UpdateLabelRequest }) =>
+      api.updateLabel(teamId, labelId, req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: labelsQueryKey(teamId) }),
+  });
+}
+
+/** 删除标签（admin+） */
+export function useDeleteLabel(teamId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (labelId: string) => api.deleteLabel(teamId, labelId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: labelsQueryKey(teamId) }),
   });
 }
 

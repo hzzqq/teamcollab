@@ -6,12 +6,13 @@ import {
   ChevronsLeftRight,
   FolderKanban,
   ListChecks,
+  Settings,
   SquareKanban,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMe } from "@/hooks/use-me";
+import { useMe, canAdmin } from "@/hooks/use-me";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { TeamSwitcher } from "./team-switcher";
 import { ThemeToggle } from "./theme-toggle";
@@ -32,24 +33,27 @@ interface NavItem {
  * - 项目：Spec §2 验收主线里的「项目」即团队实体 —— 本轮补齐为团队列表页
  *   （此前是死链，点击 404）
  *
- * 「收件箱 / 设置」仍不渲染：Spec §7 把通知中心定义为「铃铛 + 下拉面板」全局组件
- * （已实现在 NotificationBell），无独立页面；「设置」无对应页面与后端端点，
- * 按 PROJECT_BOUNDARY.md「扩展位 ≠ 现在就做」不建占位页。
+ * 「收件箱」仍不渲染：Spec §7 把通知中心定义为「铃铛 + 下拉面板」全局组件
+ * （已实现在 NotificationBell），无独立页面。
+ * 「设置」已落地为团队设置页（标签管理，admin 专属）：/teams/{teamId}/settings。
  */
 const NAV_ITEMS: NavItem[] = [
   { label: "我的任务", href: "/me/tasks", icon: ListChecks },
   { label: "项目", href: "/projects", icon: FolderKanban },
   { label: "看板", href: "/boards", icon: SquareKanban },
   { label: "成员", href: "/members", icon: Users },
+  { label: "设置", href: "/settings", icon: Settings },
 ];
 
 /** 把导航项映射到真实路由：
  * - 看板 → /boards（当前团队的看板列表页）
  * - 成员 → /teams/{teamId}/members（成员管理在团队上下文下）
+ * - 设置 → /teams/{teamId}/settings（标签管理，admin 专属）
  */
 function hrefFor(item: NavItem, teamId?: string) {
   if (item.href === "/boards") return "/boards";
   if (item.href === "/members") return teamId ? `/teams/${teamId}/members` : "/boards";
+  if (item.href === "/settings") return teamId ? `/teams/${teamId}/settings` : "/boards";
   return item.href;
 }
 
@@ -63,8 +67,10 @@ export function Sidebar({
   const pathname = usePathname();
   const { data: me, isLoading } = useMe();
   const teamId = me?.team?.id;
+  const isAdmin = canAdmin(me?.role);
 
-  const visibleItems = NAV_ITEMS;
+  // 「设置」(标签管理) 为 admin 专属页面的入口，仅对管理员可见
+  const visibleItems = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((i) => i.href !== "/settings");
 
   return (
     <aside

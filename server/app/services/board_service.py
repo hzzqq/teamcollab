@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from sqlalchemy.orm import Session
 
-from app.core.errors import not_found
+from app.core.errors import conflict, not_found
 from app.models.board import Board
 from app.models.board_column import BoardColumn
 from app.repositories.board_repo import board_repo
@@ -82,6 +82,15 @@ class BoardService:
             column.position = position
         db.commit()
         return column
+
+    def delete_column(self, db: Session, column_id: uuid.UUID, team_id: uuid.UUID) -> None:
+        column = self._get_owned_column(db, column_id, team_id)
+        # 非空保护：tasks.column_id 是 ON DELETE CASCADE，若直接删列会静默连删任务，
+        # 对协作场景属数据丢失，故先拦截，引导用户清空/移动任务。
+        if task_repo.count_by_column(db, column_id) > 0:
+            raise conflict("该列仍有任务，请先清空或移动任务后再删除")
+        db.delete(column)
+        db.commit()
 
     @staticmethod
     def _get_owned(db: Session, board_id: uuid.UUID, team_id: uuid.UUID) -> Board:

@@ -103,3 +103,13 @@ def update_column(
 ):
     column = board_service.update_column(db, column_id, ctx.team_id, payload.name, payload.position)
     return {"code": 0, "data": column, "message": ""}
+
+
+@router.delete("/columns/{column_id}", response_model=OkResponse)
+def delete_column(
+    column_id: uuid.UUID,
+    ctx=Depends(require_column_roles(*ROLE_ADMIN_PLUS)),
+    db: Session = Depends(get_db),
+):
+    board_service.delete_column(db, column_id, ctx.team_id)
+    return {"code": 0, "data": {"ok": True}, "message": ""}

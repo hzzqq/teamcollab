@@ -204,6 +204,18 @@ export const api = {
     return rawRequest(`/api/v1/teams/${teamId}/boards`, "POST", { body: { name } });
   },
 
+  /** 重命名看板（member+） */
+  async updateBoard(boardId: string, name: string): Promise<Board> {
+    if (API_MODE === "mock") return unwrap(await mockApi.updateBoard(boardId, name));
+    return rawRequest(`/api/v1/boards/${boardId}`, "PATCH", { body: { name } });
+  },
+
+  /** 删除看板（admin+） */
+  async deleteBoard(boardId: string): Promise<{ ok: boolean }> {
+    if (API_MODE === "mock") return unwrap(await mockApi.deleteBoard(boardId));
+    return rawRequest(`/api/v1/boards/${boardId}`, "DELETE");
+  },
+
   async boardDetail(boardId: string): Promise<BoardDetail> {
     if (API_MODE === "mock") return unwrap(await mockApi.boardDetail(boardId));
     return rawRequest(`/api/v1/boards/${boardId}`, "GET");
@@ -212,6 +224,18 @@ export const api = {
   async createColumn(boardId: string, name: string): Promise<BoardDetail["columns"][number]> {
     if (API_MODE === "mock") return unwrap(await mockApi.createColumn(boardId, name));
     return rawRequest(`/api/v1/boards/${boardId}/columns`, "POST", { body: { name } });
+  },
+
+  /** 重命名/移动列（member+） */
+  async updateColumn(columnId: string, req: { name?: string; position?: number }): Promise<BoardDetail["columns"][number]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.updateColumn(columnId, req));
+    return rawRequest(`/api/v1/columns/${columnId}`, "PATCH", { body: req });
+  },
+
+  /** 删除列（admin+，非空列被后端 409 拦截） */
+  async deleteColumn(columnId: string): Promise<{ ok: boolean }> {
+    if (API_MODE === "mock") return unwrap(await mockApi.deleteColumn(columnId));
+    return rawRequest(`/api/v1/columns/${columnId}`, "DELETE");
   },
 
   async createTask(boardId: string, req: CreateTaskRequest): Promise<Task> {

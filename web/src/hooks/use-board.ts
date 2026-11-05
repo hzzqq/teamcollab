@@ -30,6 +30,27 @@ export function useCreateBoard(teamId: string) {
   });
 }
 
+/** 重命名看板（member+） */
+export function useUpdateBoard(teamId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ boardId, name }: { boardId: string; name: string }) => api.updateBoard(boardId, name),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: boardsQueryKey(teamId) });
+      qc.invalidateQueries({ queryKey: boardQueryKey(vars.boardId) });
+    },
+  });
+}
+
+/** 删除看板（admin+） */
+export function useDeleteBoard(teamId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (boardId: string) => api.deleteBoard(boardId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: boardsQueryKey(teamId) }),
+  });
+}
+
 /** 看板详情（列 + 任务） */
 export function useBoard(boardId: string) {
   return useQuery({
@@ -46,6 +67,25 @@ export function useCreateColumn(boardId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
     },
+  });
+}
+
+/** 重命名/移动列（member+） */
+export function useUpdateColumn(boardId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ columnId, req }: { columnId: string; req: { name?: string; position?: number } }) =>
+      api.updateColumn(columnId, req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: boardQueryKey(boardId) }),
+  });
+}
+
+/** 删除列（admin+，非空列后端 409 拦截） */
+export function useDeleteColumn(boardId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (columnId: string) => api.deleteColumn(columnId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: boardQueryKey(boardId) }),
   });
 }
 

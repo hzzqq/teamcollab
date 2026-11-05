@@ -181,6 +181,26 @@ export const mockApi = {
     return delay(ok(board));
   },
 
+  async updateBoard(boardId: string, name: string): Promise<ApiEnvelope<Board>> {
+    const idx = db.boards.findIndex((b) => b.id === boardId);
+    if (idx < 0) return delay(err(40401, "看板不存在"));
+    const updated = { ...db.boards[idx], name, updated_at: new Date().toISOString() };
+    db.boards = db.boards.map((b, i) => (i === idx ? updated : b));
+    return delay(ok(updated));
+  },
+
+  async deleteBoard(boardId: string): Promise<ApiEnvelope<{ ok: boolean }>> {
+    const target = db.boards.find((b) => b.id === boardId);
+    if (!target) return delay(err(40401, "看板不存在"));
+    // 级联移除列与任务（镜像后端 ON DELETE CASCADE）
+    for (const col of db.columns[boardId] || []) {
+      delete db.tasks[col.id];
+    }
+    delete db.columns[boardId];
+    db.boards = db.boards.filter((b) => b.id !== boardId);
+    return delay(ok({ ok: true }));
+  },
+
   async boardDetail(boardId: string): Promise<ApiEnvelope<BoardDetail>> {
     const board = db.boards.find((b) => b.id === boardId);
     if (!board) return delay(err(40401, "看板不存在"));
@@ -193,6 +213,40 @@ export const mockApi = {
     db.columns[boardId] = [...cols, col];
     db.tasks[col.id] = [];
     return delay(ok(col));
+  },
+
+  async updateColumn(columnId: string, req: { name?: string; position?: number }): Promise<ApiEnvelope<BoardDetail["columns"][number]>> {
+    for (const boardId of Object.keys(db.columns)) {
+      const idx = db.columns[boardId].findIndex((c) => c.id === columnId);
+      if (idx >= 0) {
+        const updated = {
+          ...db.columns[boardId][idx],
+          ...(req.name !== undefined ? { name: req.name } : {}),
+          ...(req.position !== undefined ? { position: req.position } : {}),
+          tasks: (db.tasks[columnId] || []).slice(),
+          updated_at: new Date().toISOString(),
+        };
+        db.columns[boardId] = db.columns[boardId].map((c, i) => (i === idx ? updated : c));
+        return delay(ok(updated));
+      }
+    }
+    return delay(err(40401, "列不存在"));
+  },
+
+  async deleteColumn(columnId: string): Promise<ApiEnvelope<{ ok: boolean }>> {
+    for (const boardId of Object.keys(db.columns)) {
+      const col = db.columns[boardId].find((c) => c.id === columnId);
+      if (col) {
+        // 非空列（含任务）拒绝删除（镜像后端 409 保护）
+        if ((db.tasks[columnId] || []).length > 0) {
+          return delay(err(40901, "该列仍有任务，请先清空或移动任务后再删除"));
+        }
+        db.columns[boardId] = db.columns[boardId].filter((c) => c.id !== columnId);
+        delete db.tasks[columnId];
+        return delay(ok({ ok: true }));
+      }
+    }
+    return delay(err(40401, "列不存在"));
   },
 
   async createTask(boardId: string, req: CreateTaskRequest): Promise<ApiEnvelope<Task>> {

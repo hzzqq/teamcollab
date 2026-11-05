@@ -82,7 +82,7 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 
 ## 验证状态（2026-11-05）
 
-- 后端：pytest **124 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**）
+- 后端：pytest **127 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**/**列删除非空保护**）
 - 前端：tsc 0 错误、ESLint 0 警告、**单元测试 22/22**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
 - 拖拽契约：前后端共用同一套落位语义 —— 路径 `columnId` = **目标列**；`server/tests/test_drag_contract.py`（10 例）与 `web/tests/drag-position.test.mjs`（12 例）互为对照，任一方改动契约必红
 - API e2e 冒烟（`server/scripts/e2e_smoke.py`，真实起服）：覆盖注册/登录/**me/me-teams/创建团队**/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/我的任务/通知/RBAC/SSE/CORS/到期提醒 —— **26/26 全绿**
@@ -100,8 +100,8 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 | 项目列表页 | Spec §2 的「项目」= 团队实体 → `/projects` 列出全部所属团队，可新建团队 | `web/src/app/(app)/projects/page.tsx` |
 | 缓存隔离 | 切换团队后清理旧团队的看板/成员/详情缓存，避免切回时读到陈旧数据 | `use-me.ts`（`removeQueries`） |
 
-> 「收件箱 / 设置」仍不作为独立页面：Spec §7 把通知中心定义为「铃铛 + 下拉面板」全局组件（已实现），
-> 「设置」无对应页面与后端端点，按 `PROJECT_BOUNDARY.md`「扩展位 ≠ 现在就做」不建占位页。
+> 「收件箱」仍不作为独立页面：Spec §7 把通知中心定义为「铃铛 + 下拉面板」全局组件（已实现）。
+> 「设置」已落地为**团队设置页**（`/teams/{teamId}/settings`，仅 admin 可见入口），当前承载**标签管理**（团队级标签的增删改 + 改色，admin 专属资源），见下方专节。
 
 ## 多实例运行时验证（无 Docker 环境下的等价验证）
 
@@ -153,6 +153,23 @@ cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
 | 前端三通道 | `api-types / api / mock` 同步补齐类型与方法；抽屉内标签多选 + 卡片标签芯片 + 看板顶部「标签 + 优先级」筛选条（筛选态禁用拖拽以保护落位契约） | `web/src/{lib,hooks,components}` |
 
 > 关键坑：`Task.labels` 用 `lazy="raise"`，列表查询须 `selectinload`（避免 joinedload 行膨胀 `.unique()` 报错）；提交后须 `db.refresh(task, ["labels"])` 刷新集合，否则 identity map 复用陈旧空集合导致返回空标签。
+
+## 看板 / 列管理 + 标签设置页（2026-11-06 批次）
+
+协作 SaaS 范畴内的看板管理能力补全：列删除（此前缺失）、列/看板重命名与删除的前端入口、
+以及 admin 专属的**团队设置页（标签管理）**。均落在边界宪法允许范围内。
+
+| 项 | 约定 | 落地位置 |
+|----|------|---------|
+| 删除列 | `DELETE /columns/{columnId}`，限 **admin+**；**非空列（含任务）被 409 拦截**——`tasks.column_id` 是 `ON DELETE CASCADE`，直接删会静默连删任务，属数据丢失，故先行保护 | `board_service.delete_column` + `require_column_roles(*ADMIN_PLUS)` |
+| 列重命名 / 移动 | `PATCH /columns/{columnId}`（`name`/`position`），限 **member+**，前端列头内联编辑 | `KanbanBoard.tsx` 列头 |
+| 看板重命名 | `PATCH /boards/{boardId}`（`name`），限 **member+**，前端看板头部内联编辑 | `board-view.tsx` 头部 |
+| 删除看板 | `DELETE /boards/{boardId}`，限 **admin+**，删除后跳回 `/boards` | `board-view.tsx` 头部 |
+| 标签设置页 | `/teams/{teamId}/settings`（侧栏仅 admin 可见入口），团队级标签的**新建 / 重命名 / 改色 / 删除**，admin 专属 | `teams/[teamId]/settings/page.tsx` + `use-labels.ts` 三个写 hook |
+| 前端三通道 | `api / mock` 同步补齐 `updateColumn/deleteColumn/updateBoard/deleteBoard`，mock 层镜像后端非空保护（删非空列返回 40901） | `web/src/lib/{api,mock/api}.ts` |
+
+> 关键设计：删除列**不级联删任务**，而是 409 引导用户先清空/移动任务——协作场景下任务数据比列结构更关键，
+> 静默丢失不可接受。这与「删除看板级联删列与任务」（`ON DELETE CASCADE` 由 board→column→task 三段 FK 触发）形成明确分级：删看板是整体性销毁（确认后级联），删单列只动结构。
 
 ## 已修复的关键缺陷（2026-11-05 评审批次）
 

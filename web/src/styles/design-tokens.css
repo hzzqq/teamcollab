@@ -115,11 +115,13 @@
   --bp-xl: 1280px;
 
   /* ---------- z-index 层级 ---------- */
+  /* dropdown 必须高于 modal：Select/DropdownMenu 常嵌在 Dialog 抽屉内，
+     其 portal 内容若低于 modal 遮罩(z-modal)会被遮罩拦截点击（既看不见也点不到）。 */
   --z-base:     0;
-  --z-dropdown: 1000;
   --z-sticky:   1100;
   --z-drawer:   1200;
   --z-modal:    1300;
+  --z-dropdown: 1350;
   --z-toast:    1400;
 }
 

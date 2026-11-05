@@ -31,34 +31,26 @@ function check(name, ok, detail = "") {
 const shot = (page, name) =>
   page.screenshot({ timeout: 10000, animations: "disabled", path: `${SHOT_DIR}/${name}.png` }).catch(() => {});
 
-// selectRadix：Radix Select 嵌在 Dialog 抽屉内，直接点选项常被遮罩拦截致赋值静默
-// 失败；用键盘 typeahead 选中并校验 combobox 显示值，兜底 force 点击。
+// selectRadix：Radix Select 嵌在 Dialog 抽屉内，选项在 portal 中渲染。下拉层级的
+// z-index 已修正为高于 modal 遮罩（见 design-tokens.css），故正常 click 即可命中；
+// 仍保留 force 兜底与「combobox 显示值含选项名」校验，失败明确抛出。
 async function selectRadix(page, labelLocator, optionName) {
   const combo = labelLocator.locator('[role="combobox"]');
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await combo.click();
-    await page.waitForTimeout(150);
-    // 键盘 typeahead：输入选项文本命中，回车确认（对 Select-in-Dialog 最稳）
+  await combo.click();
+  const opt = page.getByRole("option", { name: optionName }).first();
+  await opt.waitFor({ state: "visible", timeout: 8000 });
+  let selected = false;
+  for (let i = 0; i < 2 && !selected; i++) {
     try {
-      await page.keyboard.type(optionName, { delay: 25 });
-      await page.keyboard.press("Enter");
+      await opt.click({ timeout: 8000 });
     } catch {
-      /* 忽略，走下方兜底 */
+      await opt.click({ force: true, timeout: 5000 }).catch(() => {});
     }
     await page.waitForTimeout(300);
-    let val = (await combo.textContent().catch(() => "")) || "";
-    if (val.includes(optionName)) return;
-    // 兜底：强制点选项（仍可能被遮罩拦截，但作为最后手段）
-    const opt = page.getByRole("option", { name: optionName }).first();
-    await opt.scrollIntoViewIfNeeded().catch(() => {});
-    await opt.click({ force: true }).catch(() => {});
-    await page.waitForTimeout(300);
-    val = (await combo.textContent().catch(() => "")) || "";
-    if (val.includes(optionName)) return;
-    await page.waitForTimeout(300);
+    const val = (await combo.textContent().catch(() => "")) || "";
+    selected = val.includes(optionName);
   }
-  // 三次均未确认到选中值：抛出，让上方捕获为 run_error，明确暴露赋值失败
-  throw new Error(`selectRadix 未能选中选项「${optionName}」`);
+  if (!selected) throw new Error(`selectRadix 未能选中选项「${optionName}」`);
 }
 
 async function launchBrowser() {

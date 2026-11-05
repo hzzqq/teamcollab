@@ -3,6 +3,10 @@
    镜像 openapi-v2.yaml 端点形状，前端零改动切换真实后端
    ============================================================ */
 import type {
+  AdminCreateUserRequest,
+  AdminTeam,
+  AdminUpdateUserRequest,
+  AdminUser,
   ApiEnvelope,
   AuthResponse,
   Board,
@@ -62,6 +66,7 @@ export const mockApi = {
       id: `u-${++tokenSeq}`,
       email: req.email,
       display_name: req.display_name,
+      is_superuser: false,
       created_at: new Date().toISOString(),
     };
     db.users.push(user);
@@ -442,6 +447,68 @@ export const mockApi = {
     db.notifications = db.notifications.map((n) =>
       n.id === notificationId ? { ...n, is_read: true } : n
     );
+    return delay(ok({ ok: true }));
+  },
+
+  /* ---------------- 管理员后台（mock 镜像 /admin） ---------------- */
+
+  async adminUsers(): Promise<ApiEnvelope<AdminUser[]>> {
+    return delay(ok(structuredClone(db.users)));
+  },
+
+  async adminTeams(): Promise<ApiEnvelope<AdminTeam[]>> {
+    const out: AdminTeam[] = db.teams.map((t) => ({
+      id: t.id,
+      name: t.name,
+      member_count: db.members[t.id]?.length || 0,
+    }));
+    return delay(ok(out));
+  },
+
+  async adminCreateUser(req: AdminCreateUserRequest): Promise<ApiEnvelope<AdminUser>> {
+    if (db.users.some((u) => u.email === req.email)) return delay(err(40901, "该邮箱已注册"));
+    const user: User = {
+      id: `u-${++tokenSeq}`,
+      email: req.email,
+      display_name: req.display_name,
+      is_superuser: req.is_superuser ?? false,
+      created_at: new Date().toISOString(),
+    };
+    db.users.push(user);
+    return delay(ok(structuredClone(user)));
+  },
+
+  async adminUpdateUser(userId: string, req: AdminUpdateUserRequest): Promise<ApiEnvelope<AdminUser>> {
+    const user = db.users.find((u) => u.id === userId);
+    if (!user) return delay(err(40401, "用户不存在"));
+    if (req.is_superuser === false && user.is_superuser && db.users.filter((u) => u.is_superuser).length <= 1) {
+      return delay(err(40001, "至少需保留一个超级管理员"));
+    }
+    if (req.display_name !== undefined) user.display_name = req.display_name;
+    if (req.is_superuser !== undefined) user.is_superuser = req.is_superuser;
+    return delay(ok(structuredClone(user)));
+  },
+
+  async adminResetPassword(userId: string, newPassword: string): Promise<ApiEnvelope<{ ok: boolean }>> {
+    const user = db.users.find((u) => u.id === userId);
+    if (!user) return delay(err(40401, "用户不存在"));
+    // 镜像后端：密码至少 8 位
+    if (newPassword.length < 8) return delay(err(40001, "密码至少 8 位"));
+    return delay(ok({ ok: true }));
+  },
+
+  async adminDeleteUser(userId: string): Promise<ApiEnvelope<{ ok: boolean }>> {
+    const user = db.users.find((u) => u.id === userId);
+    if (!user) return delay(err(40401, "用户不存在"));
+    if (user.id === currentUser().id) return delay(err(40301, "不能删除自己的账号"));
+    if (user.is_superuser && db.users.filter((u) => u.is_superuser).length <= 1) {
+      return delay(err(40001, "至少需保留一个超级管理员，无法删除最后一个超级管理员"));
+    }
+    db.users = db.users.filter((u) => u.id !== userId);
+    // 同步从各团队成员列表移除
+    for (const teamId of Object.keys(db.members)) {
+      db.members[teamId] = db.members[teamId].filter((m) => m.user.id !== userId);
+    }
     return delay(ok({ ok: true }));
   },
 };

@@ -138,6 +138,13 @@ def require_team_roles(*roles: str):
     return _dep
 
 
+def require_superuser(user: User = Depends(get_current_user)) -> User:
+    """平台级超级管理员守卫（/admin 后台）。与团队内 owner/admin 角色正交。"""
+    if not user.is_superuser:
+        raise forbidden("需要超级管理员权限")
+    return user
+
+
 def require_board_roles(*roles: str):
     def _dep(ctx: ResourceContext = Depends(get_board_context)) -> ResourceContext:
         if ctx.role not in roles:

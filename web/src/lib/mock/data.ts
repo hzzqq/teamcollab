@@ -39,10 +39,10 @@ function dayOffset(n: number): string {
 
 /* 真实感种子数据（避免 John Doe 类占位名） */
 export const seedUsers: User[] = [
-  { id: "u-pm", email: "pm@example.com", display_name: "沈知远", created_at: now },
-  { id: "u-dev", email: "dev@example.com", display_name: "林晚晴", created_at: now },
-  { id: "u-ds", email: "design@example.com", display_name: "顾南乔", created_at: now },
-  { id: "u-op", email: "ops@example.com", display_name: "陆之遥", created_at: now },
+  { id: "u-pm", email: "pm@example.com", display_name: "沈知远", is_superuser: true, created_at: now },
+  { id: "u-dev", email: "dev@example.com", display_name: "林晚晴", is_superuser: false, created_at: now },
+  { id: "u-ds", email: "design@example.com", display_name: "顾南乔", is_superuser: false, created_at: now },
+  { id: "u-op", email: "ops@example.com", display_name: "陆之遥", is_superuser: false, created_at: now },
 ];
 
 export const seedTeam: Team = {

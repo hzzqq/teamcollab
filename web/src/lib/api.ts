@@ -9,6 +9,11 @@
 import { clearTokens, getAccessToken, getRefreshToken, setAccessToken, setTokens } from "./auth";
 import { mockApi } from "./mock/api";
 import type {
+  AdminCreateUserRequest,
+  AdminResetPasswordRequest,
+  AdminTeam,
+  AdminUpdateUserRequest,
+  AdminUser,
   ApiEnvelope,
   AuthResponse,
   Board,
@@ -345,6 +350,45 @@ export const api = {
     const token = getAccessToken();
     if (!token) return null;
     return `${API_BASE}/api/v1/notifications/stream?token=${encodeURIComponent(token)}`;
+  },
+
+  /* ---------------- 管理员后台（超级管理员专属，/admin） ---------------- */
+
+  /** 全量用户列表 */
+  async adminUsers(): Promise<AdminUser[]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.adminUsers());
+    return rawRequest("/api/v1/admin/users", "GET");
+  },
+
+  /** 全量团队列表（含成员数） */
+  async adminTeams(): Promise<AdminTeam[]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.adminTeams());
+    return rawRequest("/api/v1/admin/teams", "GET");
+  },
+
+  /** 创建用户（可一并设为超级管理员） */
+  async adminCreateUser(req: AdminCreateUserRequest): Promise<AdminUser> {
+    if (API_MODE === "mock") return unwrap(await mockApi.adminCreateUser(req));
+    return rawRequest("/api/v1/admin/users", "POST", { body: req });
+  },
+
+  /** 更新用户（改名 / 升降超级管理员） */
+  async adminUpdateUser(userId: string, req: AdminUpdateUserRequest): Promise<AdminUser> {
+    if (API_MODE === "mock") return unwrap(await mockApi.adminUpdateUser(userId, req));
+    return rawRequest(`/api/v1/admin/users/${userId}`, "PATCH", { body: req });
+  },
+
+  /** 重置用户密码 */
+  async adminResetPassword(userId: string, newPassword: string): Promise<{ ok: boolean }> {
+    if (API_MODE === "mock") return unwrap(await mockApi.adminResetPassword(userId, newPassword));
+    const body: AdminResetPasswordRequest = { new_password: newPassword };
+    return rawRequest(`/api/v1/admin/users/${userId}/reset-password`, "POST", { body });
+  },
+
+  /** 删除用户 */
+  async adminDeleteUser(userId: string): Promise<{ ok: boolean }> {
+    if (API_MODE === "mock") return unwrap(await mockApi.adminDeleteUser(userId));
+    return rawRequest(`/api/v1/admin/users/${userId}`, "DELETE");
   },
 };
 

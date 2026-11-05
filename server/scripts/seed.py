@@ -29,6 +29,8 @@ def main() -> None:
             print(f"种子已存在（{email}），跳过")
             return
         user = user_repo.create(db, email, hash_password("pass1234"), "PM 晓明")
+        # 演示账号即平台超级管理员（/admin 后台入口），与团队内 owner 角色正交
+        user.is_superuser = True
         teammate = user_repo.create(db, "dev@example.com", hash_password("pass1234"), "开发 阿强")
         team = Team(name="Demo 产品团队")
         db.add(team)

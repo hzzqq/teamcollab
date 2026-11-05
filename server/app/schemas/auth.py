@@ -14,6 +14,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: EmailStr
     display_name: str
+    is_superuser: bool
     created_at: datetime
 
 

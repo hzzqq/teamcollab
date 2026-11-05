@@ -1,6 +1,6 @@
 """users 表。"""
 
-from sqlalchemy import Index, String, text
+from sqlalchemy import Boolean, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -18,3 +18,7 @@ class User(UUIDPkMixin, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 全局超级管理员（跨团队协作 SaaS 的平台级管理账号），与团队内 owner/admin 角色正交
+    is_superuser: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )

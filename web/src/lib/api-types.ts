@@ -39,7 +39,43 @@ export interface User {
   id: string;
   email: string;
   display_name: string;
+  /** 平台级超级管理员标记（/admin 后台），与团队内 owner/admin 角色正交 */
+  is_superuser: boolean;
   created_at: string;
+}
+
+/** 管理员后台用户条目（/admin/users） */
+export interface AdminUser {
+  id: string;
+  email: string;
+  display_name: string;
+  is_superuser: boolean;
+  created_at: string;
+}
+
+/** 管理员后台团队条目（/admin/teams，含成员数） */
+export interface AdminTeam {
+  id: string;
+  name: string;
+  member_count: number;
+}
+
+/* ---------------- 管理员后台请求体 ---------------- */
+
+export interface AdminCreateUserRequest {
+  email: string;
+  password: string;
+  display_name: string;
+  is_superuser?: boolean;
+}
+
+export interface AdminUpdateUserRequest {
+  display_name?: string;
+  is_superuser?: boolean;
+}
+
+export interface AdminResetPasswordRequest {
+  new_password: string;
 }
 
 export interface Team {

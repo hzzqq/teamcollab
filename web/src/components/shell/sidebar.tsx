@@ -7,6 +7,7 @@ import {
   FolderKanban,
   ListChecks,
   Settings,
+  ShieldCheck,
   SquareKanban,
   Users,
   type LucideIcon,
@@ -45,6 +46,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: "设置", href: "/settings", icon: Settings },
 ];
 
+/** 超级管理员专属入口（与团队内 owner/admin 角色正交） */
+const ADMIN_NAV_ITEM: NavItem = { label: "管理后台", href: "/admin", icon: ShieldCheck };
+
 /** 把导航项映射到真实路由：
  * - 看板 → /boards（当前团队的看板列表页）
  * - 成员 → /teams/{teamId}/members（成员管理在团队上下文下）
@@ -68,9 +72,14 @@ export function Sidebar({
   const { data: me, isLoading } = useMe();
   const teamId = me?.team?.id;
   const isAdmin = canAdmin(me?.role);
+  const isSuperuser = Boolean(me?.user?.is_superuser);
 
-  // 「设置」(标签管理) 为 admin 专属页面的入口，仅对管理员可见
-  const visibleItems = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((i) => i.href !== "/settings");
+  // 「设置」(标签管理) 为 admin 专属页面的入口，仅对管理员可见；
+  // 「管理后台」为平台级超级管理员专属入口。
+  const visibleItems = [
+    ...(isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((i) => i.href !== "/settings")),
+    ...(isSuperuser ? [ADMIN_NAV_ITEM] : []),
+  ];
 
   return (
     <aside

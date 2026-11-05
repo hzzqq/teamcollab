@@ -53,7 +53,7 @@ export default function TeamSettingsPage() {
   const { data: me } = useMe();
   const isAdmin = canAdmin(me?.role);
 
-  const { data: labels, isLoading, isError, refetch } = useLabels(teamId);
+  const { data: labels, isLoading, isError, error, refetch } = useLabels(teamId);
   const createLabel = useCreateLabel(teamId);
   const updateLabel = useUpdateLabel(teamId);
   const deleteLabel = useDeleteLabel(teamId);
@@ -147,7 +147,7 @@ export default function TeamSettingsPage() {
       <StateSwitch
         isLoading={isLoading}
         isError={isError}
-        errorMessage="标签加载失败"
+        errorMessage={error instanceof ApiError ? error.message : "标签加载失败"}
         onRetry={() => refetch()}
         isEmpty={!isLoading && !isError && labels?.length === 0}
         skeleton={<SkeletonRows rows={3} />}

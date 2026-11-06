@@ -18,6 +18,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+from pathlib import Path as _Path
+
+_ROOT = _Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from port_env import resolve_port  # noqa: E402
 import subprocess
 import sys
 import time
@@ -84,7 +92,9 @@ def migrate() -> bool:
 
 def start_backend() -> int:
     log("启动 FastAPI 后端（前台，Ctrl+C 退出）...")
-    return run([venv_python(), "-m", "uvicorn", "app.main:app", "--port", "8000", "--reload"], cwd=SERVER).returncode
+    # 端口优先级：BACKEND_PORT 环境变量 > .port.env（port-doctor 分配） > 8000
+    port = resolve_port("PORT", 8000, env_var="BACKEND_PORT")
+    return run([venv_python(), "-m", "uvicorn", "app.main:app", "--port", str(port), "--reload"], cwd=SERVER).returncode
 
 
 def main() -> int:

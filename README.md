@@ -13,7 +13,7 @@
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
 | 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest 129 全绿（2026-11-05 基线）+ 管理员后台 9 例（2026-11-06）；前端 tsc + ESLint + 单测 + `next build` 全过 |
+| 测试 | 后端 pytest 146 全绿（129 基线 + 9 管理员 + 8 全局搜索）；前端 32 单测 + tsc + ESLint + `next build`；浏览器 E2E 四套（视觉 / 后台 / 主线 / 搜索） |
 
 ## 目录
 
@@ -21,7 +21,7 @@
 docs/            # Phase 1 三文档 + Spec v1.0 + Phase 2 设计系统（契约）
 docs/v1.0-release.md  # v1.0 发布文档（功能清单 / 验收证据 / 已知限制 / 部署形态）
 web/             # Next.js 前端（10 路由，含 /admin 后台）
-server/          # FastAPI 后端（42 端点 / 10 表 / 4 个迁移，头 0004）
+server/          # FastAPI 后端（43 端点 / 10 表 / 4 个迁移，头 0004）
 docker-compose.yml  # PostgreSQL 17（pgvector 镜像）
 .pgtmp/          # 本地 PG 17.5 实例（本机无 Docker daemon 时的替代，含数据目录）
 ```

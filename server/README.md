@@ -19,7 +19,7 @@ server/
 │   └── api/
 │       ├── deps.py          # 认证 / RBAC（实时查角色）/ 租户上下文 / require_superuser
 │       ├── errors.py        # 全局异常处理器
-│       └── v1/              # 路由（auth/me/teams/boards/tasks/comments/labels/notifications/admin）
+│       └── v1/              # 路由（auth/me/teams/boards/tasks/comments/labels/notifications/admin/search）
 ├── alembic/                 # 迁移 0001~0004（头 0004_add_superuser.py）
 ├── tests/                   # pytest + httpx TestClient（含 test_admin.py）
 ├── scripts/seed.py          # 开发种子数据
@@ -63,7 +63,8 @@ python -m venv .venv
 
 ## 核心契约
 
-- **运行时 42 端点**（`v1/` 下 10 个路由模块）；`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，完整契约以运行时 `/docs` 为准
+- **运行时 43 端点**（`v1/` 下 11 个路由模块）；`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，完整契约以运行时 `/docs` 为准
+- 全局搜索：`GET /api/v1/search?q=&limit=`，按 `team_members` 实时取 team_ids、经 `boards.team_id` 隔离（tasks 表无 team_id）；LIKE 通配符 `%` `_` 转义为字面量，结果含团队/看板/列面包屑供命令面板深链使用
 - 统一响应：`{ "code": 0, "data": {}, "message": "" }`
 - 错误码：40001 / 40101 / 40301 / 40401 / 40901 / 42901 / 50000
 - 认证：`Authorization: Bearer <access_token>`（SSE 走 `?token=`）

@@ -49,6 +49,13 @@ src/
 - 输入框 40px 高 / 6px 圆角，顶栏 64px，卡片间距 24px
 - 全部 token 集中在 `src/styles/design-tokens.css`；页面禁止硬编码颜色。层级纪律见 `../docs/phase2/DESIGN.md`
 
+## 全局搜索与快捷键
+
+- `⌘K / Ctrl+K` 打开命令面板，跨看板搜任务与看板；后端 `/api/v1/search` 按当前用户所属团队做租户隔离（`tasks` 无 `team_id`，经 `boards.team_id` 兜底）
+- `?` 打开快捷键帮助；`C` 在看板第一列快速新建任务；输入框聚焦或弹层打开时单键快捷键自动让位
+- 命中任务跳 `/boards/{boardId}?task={taskId}` 深链，自动打开 TaskDrawer；↑↓ 选择、↵ 打开、Esc 关闭
+- 搜索支持 real / mock 双通道；纯逻辑在 `src/lib/shortcuts.ts`，单测见 `tests/shortcuts.test.mjs`
+
 ## 验证
 
 ```bash

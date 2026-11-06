@@ -24,6 +24,7 @@ import type {
   RefreshResponse,
   RegisterRequest,
   Role,
+  SearchResult,
   Task,
   Team,
   UpdateLabelRequest,
@@ -129,6 +130,62 @@ export const mockApi = {
     const limit = params.limit || 20;
     const sliced = items.slice((page - 1) * limit, page * limit);
     return delay(ok({ items: sliced, total, page, limit, hasMore: page * limit < total }));
+  },
+
+  /** 与 /api/v1/search 契约一致：只返回当前用户所属团队的任务 / 看板 */
+  async search(q: string, limit = 8): Promise<ApiEnvelope<SearchResult>> {
+    const query = q.trim();
+    if (!query) return delay(ok({ query, tasks: [], boards: [] }));
+
+    const user = currentUser();
+    const teamIds = Object.entries(db.members)
+      .filter(([, members]) => members.some((m) => m.user.id === user.id))
+      .map(([teamId]) => teamId);
+    const boards = db.boards.filter((b) => teamIds.includes(b.team_id));
+    const boardById = new Map(boards.map((b) => [b.id, b]));
+    const teamById = new Map(db.teams.map((t) => [t.id, t]));
+    const columnById = new Map<string, { name: string }>();
+    for (const b of boards) {
+      for (const c of db.columns[b.id] || []) columnById.set(c.id, c);
+    }
+
+    const needle = query.toLowerCase();
+    const tasks = Object.values(db.tasks)
+      .flat()
+      .filter((t) => boardById.has(t.board_id))
+      .filter(
+        (t) =>
+          t.title.toLowerCase().includes(needle) ||
+          (t.description || "").toLowerCase().includes(needle),
+      )
+      .slice(0, limit)
+      .map((t) => {
+        const board = boardById.get(t.board_id)!;
+        return {
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          board_id: t.board_id,
+          board_name: board.name,
+          team_id: board.team_id,
+          team_name: teamById.get(board.team_id)?.name || "",
+          column_id: t.column_id,
+          column_name: columnById.get(t.column_id)?.name || "",
+          priority: t.priority,
+          status: t.status,
+          due_date: t.due_date,
+        };
+      });
+    const boardHits = boards
+      .filter((b) => b.name.toLowerCase().includes(needle))
+      .slice(0, limit)
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        team_id: b.team_id,
+        team_name: teamById.get(b.team_id)?.name || "",
+      }));
+    return delay(ok({ query, tasks, boards: boardHits }));
   },
 
   async teamsBoards(teamId: string): Promise<ApiEnvelope<Board[]>> {

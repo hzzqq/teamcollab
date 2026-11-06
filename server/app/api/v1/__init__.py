@@ -10,6 +10,7 @@ from app.api.v1 import (
     labels,
     me,
     notifications,
+    search,
     tasks,
     teams,
 )
@@ -24,3 +25,4 @@ api_router.include_router(labels.router)
 api_router.include_router(comments.router)
 api_router.include_router(notifications.router)
 api_router.include_router(admin.router)
+api_router.include_router(search.router)

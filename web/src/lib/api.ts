@@ -31,6 +31,7 @@ import type {
   RefreshResponse,
   RegisterRequest,
   Role,
+  SearchResult,
   Task,
   Team,
   UpdateLabelRequest,
@@ -192,6 +193,13 @@ export const api = {
     qs.set("page", String(params.page || 1));
     qs.set("limit", String(params.limit || 20));
     return rawRequest(`/api/v1/me/tasks?${qs}`, "GET");
+  },
+
+  /** 跨看板全局搜索（命令面板）；后端按当前用户所属团队做租户隔离 */
+  async search(q: string, limit = 8): Promise<SearchResult> {
+    if (API_MODE === "mock") return unwrap(await mockApi.search(q, limit));
+    const qs = new URLSearchParams({ q, limit: String(limit) });
+    return rawRequest(`/api/v1/search?${qs}`, "GET");
   },
 
   async teamsBoards(teamId: string): Promise<Board[]> {

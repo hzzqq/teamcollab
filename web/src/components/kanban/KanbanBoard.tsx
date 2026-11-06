@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -31,6 +31,7 @@ import { initials } from "@/lib/utils";
 import { LabelChip } from "@/components/kanban/label-chip";
 import { filterTasks, isFilterActive, type BoardFilter } from "@/lib/board-filter";
 import type { BoardColumnWithTasks, Task } from "@/lib/api-types";
+import { QUICK_ADD_EVENT } from "@/lib/shortcuts";
 
 const PRIORITY_DOT: Record<Task["priority"], string> = {
   low: "bg-tag-blue",
@@ -63,6 +64,13 @@ export function KanbanBoard({
 
   const [addingCol, setAddingCol] = useState(false);
   const [newColName, setNewColName] = useState("");
+  // 全局快捷键 C：打开第一列的新建任务输入框；nonce 保证连按仍能重复触发
+  const [quickAddNonce, setQuickAddNonce] = useState(0);
+  useEffect(() => {
+    const onQuickAdd = () => setQuickAddNonce((n) => n + 1);
+    window.addEventListener(QUICK_ADD_EVENT, onQuickAdd);
+    return () => window.removeEventListener(QUICK_ADD_EVENT, onQuickAdd);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -111,6 +119,7 @@ export function KanbanBoard({
             onDeleteColumn={(columnId) => deleteColumn.mutate(columnId)}
             renamePending={updateColumn.isPending}
             deletePending={deleteColumn.isPending}
+            quickAddSignal={col.id === board.columns[0]?.id ? quickAddNonce : 0}
           />
         ))}
 
@@ -176,6 +185,7 @@ function Column({
   onDeleteColumn,
   renamePending,
   deletePending,
+  quickAddSignal,
 }: {
   column: BoardColumnWithTasks;
   writable: boolean;
@@ -188,9 +198,13 @@ function Column({
   onDeleteColumn: (columnId: string) => void;
   renamePending: boolean;
   deletePending: boolean;
+  quickAddSignal: number;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
   const [adding, setAdding] = useState(false);
+  useEffect(() => {
+    if (quickAddSignal > 0 && writable) setAdding(true);
+  }, [quickAddSignal, writable]);
   const [title, setTitle] = useState("");
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(column.name);

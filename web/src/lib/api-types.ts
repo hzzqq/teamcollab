@@ -293,3 +293,32 @@ export interface CreateColumnRequest {
   name: string;
   position?: number;
 }
+
+/** 全局搜索（/api/v1/search）命中项 —— 与后端 schemas/search.py 一一对应 */
+export interface SearchTaskHit {
+  id: string;
+  title: string;
+  description: string | null;
+  board_id: string;
+  board_name: string;
+  team_id: string;
+  team_name: string;
+  column_id: string;
+  column_name: string;
+  priority: Priority;
+  status: TaskStatus;
+  due_date: string | null;
+}
+
+export interface SearchBoardHit {
+  id: string;
+  name: string;
+  team_id: string;
+  team_name: string;
+}
+
+export interface SearchResult {
+  query: string;
+  tasks: SearchTaskHit[];
+  boards: SearchBoardHit[];
+}

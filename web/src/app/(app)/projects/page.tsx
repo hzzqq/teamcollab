@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, StateSwitch, SkeletonRows } from "@/components/common/states";
-import { cn } from "@/lib/utils";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "拥有者",
@@ -59,7 +58,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">
+    <div className="page-container">
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-fg">项目</h2>
@@ -92,16 +91,20 @@ export default function ProjectsPage() {
           />
         }
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {list.map(({ team, role }) => (
             <Link
               key={team.id}
               href="/boards"
               onClick={() => setActiveTeamId(team.id)}
-              className={cn(
-                "flex flex-col items-start gap-1 rounded-lg border bg-surface p-4 text-left transition-colors duration-fast hover:border-primary-500",
-                team.id === activeTeamId ? "border-primary-500" : "border-border",
-              )}
+              className="card-surface flex flex-col items-start gap-1 p-4 text-left transition-colors duration-fast hover:border-primary-500"
+              /* card-surface 的 border 简写与 Tailwind utility 同属 utilities 层，
+                 选中态用内联 borderColor 锁死，不依赖 CSS 生成顺序 */
+              style={
+                team.id === activeTeamId
+                  ? { borderColor: "var(--color-primary-500)" }
+                  : undefined
+              }
             >
               <span className="flex size-9 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-surface-warm">
                 <FolderKanban size={18} strokeWidth={1.5} />

@@ -52,7 +52,7 @@ export default function MyTasksPage() {
   const items = data?.items ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">
+    <div className="page-container">
       <div className="mb-5">
         <h2 className="text-xl font-semibold text-fg">我的任务</h2>
         <p className="text-sm text-muted">只看分配给你的任务，逾期自动置顶</p>
@@ -97,7 +97,7 @@ export default function MyTasksPage() {
           />
         }
       >
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <div className="overflow-hidden card-surface">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft text-xs text-meta">

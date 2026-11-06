@@ -3,7 +3,7 @@
    Tokens 来源：src/styles/design-tokens.css（Spec v1.0 §8 锁定）
    主题：:root 浅色（默认）+ [data-theme="dark"] 深色
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;510;590&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../styles/design-tokens.css";
@@ -51,7 +51,6 @@
   --color-tag-blue:   var(--tag-blue);
   --color-tag-green:  var(--tag-green);
   --color-tag-amber:  var(--tag-amber);
-  --color-tag-purple: var(--tag-purple);
   --color-tag-rose:   var(--tag-rose);
   --color-tag-slate:  var(--tag-slate);
 
@@ -71,14 +70,16 @@
   --text-4xl:  var(--text-4xl);
 
   /* 圆角 */
-  --radius-sm:   var(--radius-sm);
-  --radius-md:   var(--radius-md);
-  --radius-lg:   var(--radius-lg);
-  --radius-pill: var(--radius-pill);
+  --radius-sm:     var(--radius-sm);
+  --radius-md:     var(--radius-md);
+  --radius-input:  var(--radius-input);
+  --radius-lg:     var(--radius-lg);
+  --radius-pill:   var(--radius-pill);
 
-  /* 阴影（仅弹层 raised） */
+  /* 阴影：card 用于常规卡片，raised 仅弹层 */
   --shadow-flat:   var(--elev-flat);
   --shadow-ring:   var(--elev-ring);
+  --shadow-card:   var(--elev-card);
   --shadow-raised: var(--elev-raised);
 
   /* 4px 网格间距 */
@@ -122,6 +123,26 @@
 }
 
 @layer utilities {
+  /* 统一卡片：12px 圆角 + 1px 边框 + 0 1px 3px 轻阴影。
+     各页面不再手写 rounded-lg/border/bg-surface，改样式只动这一处。 */
+  .card-surface {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    box-shadow: var(--elev-card);
+  }
+
+  /* 统一内容容器：1200px 居中、24px 内边距（成熟 SaaS 布局规范） */
+  .page-container {
+    width: 100%;
+    max-width: var(--container-max);
+    margin-inline: auto;
+    padding: var(--space-6) var(--space-4);
+  }
+  @media (min-width: 768px) {
+    .page-container { padding-inline: var(--space-6); }
+  }
+
   /* 骨架屏微光（DESIGN.md §4.6，1200ms 循环） */
   .skeleton-shimmer {
     position: relative;

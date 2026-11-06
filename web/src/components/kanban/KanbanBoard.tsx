@@ -90,13 +90,13 @@ export function KanbanBoard({
   }
 
   if (isLoading) {
-    return <div className="flex gap-4 p-4"><div className="h-64 w-[272px] animate-pulse rounded-lg bg-surface-warm" /></div>;
+    return <div className="flex gap-6 p-4"><div className="h-64 w-[272px] animate-pulse rounded-lg bg-surface-warm" /></div>;
   }
   if (!board) return <p className="p-4 text-sm text-muted">看板不存在或无权访问</p>;
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-      <div className="flex h-full gap-4 overflow-x-auto p-4 scrollbar-none">
+      <div className="flex h-full gap-6 overflow-x-auto p-4 scrollbar-none">
         {board.columns.map((col) => (
           <Column
             key={col.id}
@@ -117,7 +117,7 @@ export function KanbanBoard({
         {/* 新建列 */}
         <div className="w-[272px] shrink-0">
           {addingCol ? (
-            <div className="rounded-lg border border-border bg-surface p-2">
+            <div className="card-surface p-2">
               <Input
                 autoFocus
                 value={newColName}

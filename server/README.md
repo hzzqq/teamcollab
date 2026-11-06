@@ -1,6 +1,6 @@
 # TeamCollab MVP — 后端
 
-团队协作工具 MVP 的 FastAPI 后端（看板 / 任务 / 成员 / 评论 / 通知 + RBAC + 多租户）。
+团队协作工具 MVP 的 FastAPI 后端（看板 / 任务 / 成员 / 评论 / 标签 / 通知 + RBAC + 多租户 + 平台管理后台）。
 
 技术栈（Spec §4 锁定）：FastAPI 0.140.x + SQLAlchemy 2.0 + Alembic 1.14.x + Pydantic 2.9+ + PyJWT 2.10 + bcrypt 4 + PostgreSQL 17（pgvector 镜像）。
 
@@ -9,20 +9,21 @@
 ```
 server/
 ├── app/
-│   ├── main.py              # 入口：只装配（中间件 + 路由 + 异常处理器）
-│   ├── core/                # config / db / security / errors / rate_limit
-│   ├── models/              # SQLAlchemy 模型（8 表）
-│   ├── schemas/             # Pydantic 请求/响应模型
+│   ├── main.py              # 入口：只装配（中间件 + 路由 + 异常处理器 + 调度器生命周期）
+│   ├── core/                # config / db / security / errors / rate_limit / scheduler
+│   ├── models/              # SQLAlchemy 模型（10 表）
+│   ├── schemas/             # Pydantic 请求/响应模型（含 admin.py）
 │   ├── repositories/        # 数据访问（租户过滤强制注入）
-│   ├── services/            # 业务逻辑（事务编排）
-│   ├── realtime/            # SSE 发布/订阅桥
+│   ├── services/            # 业务逻辑（事务编排，含 user_service / due_soon_service）
+│   ├── realtime/            # SSE 发布/订阅桥（进程内 or Redis pub/sub）
 │   └── api/
-│       ├── deps.py          # 认证 / RBAC（实时查角色）/ 租户上下文
+│       ├── deps.py          # 认证 / RBAC（实时查角色）/ 租户上下文 / require_superuser
 │       ├── errors.py        # 全局异常处理器
-│       └── v1/              # 路由（auth/me/teams/boards/tasks/comments/notifications）
-├── alembic/                 # 迁移（versions/0001_init_schema.py）
-├── tests/                   # pytest + httpx TestClient 冒烟测试
+│       └── v1/              # 路由（auth/me/teams/boards/tasks/comments/labels/notifications/admin）
+├── alembic/                 # 迁移 0001~0004（头 0004_add_superuser.py）
+├── tests/                   # pytest + httpx TestClient（含 test_admin.py）
 ├── scripts/seed.py          # 开发种子数据
+├── scripts/multi_instance_verify.py  # 双进程多实例验证（SSE/限流/调度器）
 ├── requirements.txt         # 运行时依赖（版本锚定）
 └── requirements-dev.txt     # 开发依赖
 ```
@@ -50,19 +51,27 @@ python -m venv .venv
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | DATABASE_URL | postgresql+psycopg://collab:collab@localhost:5432/collab | 连接串 |
-| JWT_SECRET | dev-secret-change-me-in-production | 生产必须覆盖 |
+| JWT_SECRET | dev-secret-change-me-in-production | 生产必须覆盖（ENVIRONMENT=production 时弱密钥启动即失败） |
 | ACCESS_TOKEN_EXPIRE_MINUTES | 15 | access 有效期 |
 | REFRESH_TOKEN_EXPIRE_DAYS | 7 | refresh 有效期 |
-| CORS_ORIGINS | http://localhost:3000,http://localhost:5173 | 逗号分隔 |
+| CORS_ORIGINS | http://localhost:3000,... | 逗号分隔 |
+| REDIS_URL | 空 | 非空则 SSE 广播 + 限流计数 + 调度器互斥走 Redis/PG 多实例模式；空为单进程（Redis 宕机限流 fail-open） |
+| SCHEDULER_ENABLED | true | 后台到期提醒调度器总开关 |
+| SCHEDULER_DUE_SOON_INTERVAL_SECONDS | 300 | 扫描周期（秒） |
+| DUE_SOON_RESURFACE_HOURS | 12 | 同任务重提醒防骚扰窗口 |
+| ENVIRONMENT | development | production 启用配置自检 |
 
-## 核心契约（openapi-v2.yaml，27 端点）
+## 核心契约
 
+- **运行时 42 端点**（`v1/` 下 10 个路由模块）；`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，完整契约以运行时 `/docs` 为准
 - 统一响应：`{ "code": 0, "data": {}, "message": "" }`
 - 错误码：40001 / 40101 / 40301 / 40401 / 40901 / 42901 / 50000
 - 认证：`Authorization: Bearer <access_token>`（SSE 走 `?token=`）
-- RBAC：JWT 只带 user_id，角色每次从 team_members 实时查询（AC-10 立即生效）
+- RBAC：JWT 只带 user_id，团队角色每次从 `team_members` 实时查询（AC-10 立即生效）
 - 多租户：跨团队访问统一 40401，不泄露存在性（AC-11）
-- 到期提醒：登录时惰性检查（AC-08），幂等去重
+- 平台超级管理员：`users.is_superuser` 与团队内 owner/admin 正交；`/api/v1/admin/*` 由 `require_superuser` 守卫，护栏保证至少保留一个 superuser、禁止自删
+- 到期提醒：后台调度器每 5 分钟扫描（PG advisory lock 多实例互斥 + 12h 防重发）**+ 登录/改期惰性检查**双通道
+- 拖拽契约：路径 `columnId` = 目标列，body `target_column_id` 必须一致，`position` = 目标列中先移除自身再插入的下标（详见根 README）
 
 ## 常用命令
 
@@ -72,7 +81,7 @@ python -m venv .venv
 .venv/Scripts/python -m alembic downgrade -1      # 回滚一步
 .venv/Scripts/python -m alembic current           # 当前版本
 
-# 测试
+# 测试（注意：tests/conftest.py 会 TRUNCATE 业务表，跑完须重跑 seed 恢复演示数据）
 .venv/Scripts/python -m pytest tests/ -q
 
 # 静态检查
@@ -80,8 +89,12 @@ python -m venv .venv
 
 # 种子数据
 .venv/Scripts/python -m scripts.seed
+
+# 多实例验证（真双 uvicorn 进程 + 内置 mini-redis）
+.venv/Scripts/python scripts/multi_instance_verify.py
 ```
 
 ## 种子账号
 
-`pm@example.com` / `pass1234`（owner，含示例团队/看板/任务），运行 seed 后可用。
+`pm@example.com` / `pass1234`：owner + **平台超级管理员**（`/admin` 后台入口），含示例团队/看板/任务。
+`dev@example.com` / `pass1234`：普通成员。运行 `seed.py` 后可用。

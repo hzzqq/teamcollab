@@ -14,7 +14,7 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-semibold text-fg">创建你的团队空间</h1>
           <p className="text-sm text-muted">注册即创建默认团队，10 分钟上手任务协作</p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-6 shadow-ring">
+        <div className="card-surface p-6">
           <Suspense fallback={null}>
             <AuthForm mode="register" />
           </Suspense>

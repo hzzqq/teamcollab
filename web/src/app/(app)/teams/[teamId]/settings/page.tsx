@@ -108,14 +108,14 @@ export default function TeamSettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6">
+    <div className="page-container">
       <div className="mb-5">
         <h2 className="text-xl font-semibold text-fg">团队设置</h2>
         <p className="text-sm text-muted">管理团队级标签（用于任务分类与看板筛选）</p>
       </div>
 
       {isAdmin ? (
-        <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface p-3">
+        <div className="mb-4 flex flex-wrap items-end gap-2 card-surface p-3">
           <div className="flex-1 min-w-48">
             <label className="mb-1 block text-xs text-muted">新标签名称</label>
             <Input
@@ -159,7 +159,7 @@ export default function TeamSettingsPage() {
           />
         }
       >
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <div className="overflow-hidden card-surface">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft text-xs text-meta">

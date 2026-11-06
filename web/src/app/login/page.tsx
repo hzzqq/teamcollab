@@ -14,7 +14,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-semibold text-fg">欢迎回来</h1>
           <p className="text-sm text-muted">登录以查看你的任务与团队动态</p>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-6 shadow-ring">
+        <div className="card-surface p-6">
           <Suspense fallback={null}>
             <AuthForm mode="login" />
           </Suspense>

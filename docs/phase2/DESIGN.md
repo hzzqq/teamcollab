@@ -115,17 +115,18 @@
 
 ## 6. Depth & Elevation（深度与阴影）
 
-- **三级层级**：flat（无阴影，默认）/ ring（`0 0 0 1px var(--border)`，层级表达）/ raised（`--elev-raised`，仅弹层、下拉、拖拽中卡片）
+- **四级层级（2026-11-06 修订）**：flat（无阴影）/ **card（`--elev-card: 0 1px 3px`，常规卡片默认）** / ring（`0 0 0 1px var(--border)`）/ raised（`--elev-raised`，仅弹层、下拉、拖拽中卡片）
 - **z-index**：base 0 / dropdown 1000 / sticky 1100 / drawer 1200 / modal 1300 / toast 1400
-- **深色模式**：亮度递进代替阴影（bg → surface → surface-warm），弹层阴影更含蓄
-- **禁止**：幽灵卡片（1px 边框 + blur≥16px 阴影同体）、装饰性毛玻璃、渐变文字、侧条纹边框
+- **深色模式**：亮度递进配合阴影（bg → surface → surface-warm），弹层阴影更含蓄；深色下 `--elev-card` 降为 `0 1px 3px rgba(0,0,0,.4)`
+- **禁止**：幽灵卡片（1px 边框 + blur≥16px 大阴影同体）、**阴影堆叠（卡片不得叠加多层阴影）**、装饰性毛玻璃、渐变文字、侧条纹边框
+- **修订说明**：v1.0 曾把「层级只用 1px 边框、不用阴影」列为 P0 纪律；为对齐成熟 SaaS 视觉规范（卡片 12px 圆角 + `0 1px 3px` 轻阴影），本条已放宽为「常规卡片允许单层轻阴影，弹层用 raised，禁止堆叠」。实现收敛在 `globals.css` 的 `.card-surface` 单一类，便于统一调整。
 
 ## 7. Do's & Don'ts（设计守则）
 
 ### 应该做
 1. 所有颜色/间距/圆角/动效经 Token 引用
 2. 状态用色点/小徽标表达，不用大面积色块
-3. 层级用 1px 边框与亮度递进，不用阴影堆叠
+3. 层级用 1px 边框 + 单层轻阴影（`card-surface`）与亮度递进，不堆叠阴影；弹层才用 raised
 4. 键盘优先：Cmd/Ctrl+K 搜索、C 新建任务、Enter 编辑、Esc 关闭 Drawer
 5. 空状态给具体引导 + CTA；错误给信息 + 重试
 6. 图标统一 lucide-react（16/20/24px，描边 1.5px，fill=none + stroke=currentColor）

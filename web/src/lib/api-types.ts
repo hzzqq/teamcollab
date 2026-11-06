@@ -7,7 +7,7 @@
 export type Role = "owner" | "admin" | "member" | "viewer";
 export type Priority = "low" | "medium" | "high" | "urgent";
 export type TaskStatus = "todo" | "in_progress" | "done";
-/** 标签调色板（与后端 VALID_LABEL_COLORS 一致，避开 purple/rose 偏粉） */
+/** 标签调色板（与后端 VALID_LABEL_COLORS 严格一致；purple 不在允许列表内） */
 export type LabelColor = "blue" | "green" | "amber" | "rose" | "slate";
 export type NotificationType =
   | "task_assigned"

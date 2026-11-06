@@ -66,7 +66,7 @@ export default function AdminPage() {
   // 加载中先给骨架，不能因为 me 尚未返回就误判为「无访问权限」
   if (meLoading) {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">
+      <div className="page-container">
         <SkeletonRows rows={5} />
       </div>
     );
@@ -74,7 +74,7 @@ export default function AdminPage() {
 
   if (!isSuperuser) {
     return (
-      <div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6">
+      <div className="page-container">
         <EmptyState
           icon={Shield}
           title="无访问权限"
@@ -135,7 +135,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">
+    <div className="page-container">
       <div className="mb-5">
         <h2 className="flex items-center gap-2 text-xl font-semibold text-fg">
           <UserCog size={22} strokeWidth={1.5} className="text-primary-600" />
@@ -145,7 +145,7 @@ export default function AdminPage() {
       </div>
 
       {/* 创建用户 */}
-      <div className="mb-6 rounded-lg border border-border bg-surface p-4">
+      <div className="mb-6 card-surface p-4">
         <h3 className="mb-3 text-sm font-medium text-fg">新建用户</h3>
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-48 flex-1">
@@ -201,7 +201,7 @@ export default function AdminPage() {
           skeleton={<SkeletonRows rows={4} />}
           empty={<EmptyState icon={Users} title="还没有用户" description="使用上方表单创建第一个用户。" />}
         >
-          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          <div className="overflow-hidden card-surface">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border-soft text-xs text-meta">
@@ -301,7 +301,7 @@ export default function AdminPage() {
       {/* 团队总览 */}
       <div>
         <h3 className="mb-3 text-sm font-medium text-fg">团队总览（{teams?.length ?? 0}）</h3>
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <div className="overflow-hidden card-surface">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft text-xs text-meta">

@@ -23,7 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 from app.models.base import TimestampMixin, UUIDPkMixin
 
-# 与前端共享的标签调色板（design-tokens.css 的 --tag-* 子集，避开 purple/rose 偏粉）
+# 与前端共享的标签调色板（design-tokens.css 的 --tag-* 子集；不含 --tag-purple）
 VALID_LABEL_COLORS = ("blue", "green", "amber", "rose", "slate")
 
 # 任务-标签关联表（显式定义，便于级联删除与唯一约束）

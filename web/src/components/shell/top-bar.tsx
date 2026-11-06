@@ -13,13 +13,13 @@ function titleForPath(pathname: string): string {
   return "任务协作";
 }
 
-/** 顶部视图栏 56px（DESIGN.md §4.7）：面包屑 + 通知铃 + 用户菜单 */
+/** 顶部视图栏 64px（成熟 SaaS 布局规范）：面包屑 + 通知铃 + 用户菜单 */
 export function TopBar() {
   const pathname = usePathname();
   const title = titleForPath(pathname);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 md:px-6">
+    <header className="flex h-[var(--header-height)] shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 md:px-6">
       <div className="flex min-w-0 items-center gap-2">
         <h1 className="truncate text-base font-medium text-fg">{title}</h1>
       </div>

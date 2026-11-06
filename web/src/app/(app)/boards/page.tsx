@@ -29,7 +29,7 @@ export default function BoardsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">
+    <div className="page-container">
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-fg">看板</h2>
@@ -62,13 +62,13 @@ export default function BoardsPage() {
           />
         }
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {boards?.map((b) => (
             <Link
               key={b.id}
               href={`/boards/${b.id}`}
               className={cn(
-                "flex flex-col items-start gap-1 rounded-lg border border-border bg-surface p-4 text-left transition-colors duration-fast hover:border-primary-500",
+                "flex flex-col items-start gap-1 card-surface p-4 text-left transition-colors duration-fast hover:border-primary-500",
               )}
             >
               <span className="flex size-9 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-surface-warm">

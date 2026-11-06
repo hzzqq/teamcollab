@@ -71,14 +71,14 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6">
+    <div className="page-container">
       <div className="mb-5">
         <h2 className="text-xl font-semibold text-fg">团队成员</h2>
         <p className="text-sm text-muted">邀请成员、分配角色（只读成员仅可查看）</p>
       </div>
 
       {isAdmin ? (
-        <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface p-3">
+        <div className="mb-4 flex flex-wrap items-end gap-2 card-surface p-3">
           <div className="flex-1 min-w-56">
             <label className="mb-1 block text-xs text-muted">邀请成员邮箱</label>
             <Input
@@ -137,7 +137,7 @@ export default function MembersPage() {
         skeleton={<SkeletonRows rows={4} />}
         empty={<EmptyState icon={Users} title="还没有成员" description="邀请同事加入团队，一起协作任务。" />}
       >
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <div className="overflow-hidden card-surface">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft text-xs text-meta">

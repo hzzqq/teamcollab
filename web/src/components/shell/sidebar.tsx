@@ -86,10 +86,10 @@ export function Sidebar({
         "hidden md:flex flex-col border-r border-border bg-surface transition-[width] duration-base ease-standard shrink-0",
         collapsed ? "w-16" : "w-60",
       )}
-      style={{ width: collapsed ? 64 : 240 }}
+      style={{ width: collapsed ? 64 : "var(--sidebar-width)" }}
     >
-      {/* 顶部：logo + 团队名（可切换）+ 折叠按钮 */}
-      <div className={cn("flex h-14 items-center gap-2 border-b border-border px-3", collapsed && "justify-center px-2")}>
+      {/* 顶部：logo + 团队名（可切换）+ 折叠按钮；高度与 TopBar 共用 --header-height 对齐 */}
+      <div className={cn("flex h-[var(--header-height)] items-center gap-2 border-b border-border px-3", collapsed && "justify-center px-2")}>
         {!collapsed ? (
           <TeamSwitcher collapsed={false} />
         ) : (

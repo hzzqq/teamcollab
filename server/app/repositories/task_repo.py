@@ -41,6 +41,7 @@ class TaskRepo:
         position: int = 0,
         due_date: date | None = None,
         start_date: date | None = None,
+        checklist: list[dict] | None = None,
     ) -> Task:
         task = Task(
             board_id=board_id,
@@ -54,6 +55,7 @@ class TaskRepo:
             due_date=due_date,
             start_date=start_date,
             created_by=created_by,
+            checklist=checklist or [],
         )
         db.add(task)
         return task

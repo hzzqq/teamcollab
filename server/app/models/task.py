@@ -14,7 +14,9 @@ from sqlalchemy import (
     String,
     Text,
     Uuid,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -70,6 +72,10 @@ class Task(UUIDPkMixin, TimestampMixin, Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    # 子任务清单 [{id, text, done}]：任务内嵌属性，用 JSONB 而非独立表
+    checklist: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
     )
 
     assignee: Mapped["User | None"] = relationship("User", foreign_keys=[assignee_id], lazy="raise")

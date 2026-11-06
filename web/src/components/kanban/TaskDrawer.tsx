@@ -2,15 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Flag, Trash2, X } from "lucide-react";
+import { Copy, Flag, ListChecks, Plus, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { useMe } from "@/hooks/use-me";
 import { useMembers } from "@/hooks/use-members";
-import { useTaskDetail, useUpdateTask, useDeleteTask } from "@/hooks/use-board";
+import { useTaskDetail, useUpdateTask, useDeleteTask, useCreateTask } from "@/hooks/use-board";
 import { useLabels, useAssignTaskLabels } from "@/hooks/use-labels";
 import { useComments, useCreateComment } from "@/hooks/use-comments";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { buildDuplicateRequest, checklistProgress, newChecklistItem, shortTaskId } from "@/lib/task-detail";
 import { CommentComposer } from "@/components/kanban/comment-composer";
 import {
   Select,
@@ -24,7 +27,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { HighlightMentions } from "@/components/common/highlight-mentions";
 import { timeAgo } from "@/lib/format";
 import { cn, initials } from "@/lib/utils";
-import type { Priority, TaskStatus } from "@/lib/api-types";
+import type { ChecklistItem, Priority, TaskStatus } from "@/lib/api-types";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: "待办",
@@ -54,6 +57,7 @@ export function TaskDrawer({
   const { data: task, isLoading } = useTaskDetail(taskId);
   const updateTask = useUpdateTask(boardId);
   const deleteTask = useDeleteTask(boardId);
+  const createTask = useCreateTask(boardId);
   const { data: comments, isLoading: commentsLoading } = useComments(taskId || "");
   const createComment = useCreateComment(taskId || "");
 
@@ -62,7 +66,9 @@ export function TaskDrawer({
   const assignLabels = useAssignTaskLabels(boardId);
 
   const [title, setTitle] = useState("");
+  const [newItem, setNewItem] = useState("");
   const knownNames = new Set((members ?? []).map((m) => m.user.display_name));
+  const progress = checklistProgress(task?.checklist);
 
   useEffect(() => {
     setTitle(task?.title ?? "");
@@ -78,17 +84,36 @@ export function TaskDrawer({
     });
   }
 
+  async function handleDuplicate() {
+    if (!task) return;
+    try {
+      const dup = await createTask.mutateAsync(buildDuplicateRequest(task));
+      toast.success("已复制任务");
+      router.push(`/boards/${boardId}?task=${dup.id}`);
+    } catch {
+      toast.error("复制失败，请重试");
+    }
+  }
+
   const open = Boolean(taskId);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent variant="side" aria-label="任务详情">
         {/* 头部 */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <DialogTitle className="text-xs font-medium text-meta">任务详情</DialogTitle>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
-            <X size={18} strokeWidth={1.5} />
-          </Button>
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <DialogTitle className="text-xs font-medium text-meta">任务详情</DialogTitle>
+            {task ? <span className="font-mono text-xs text-meta">#{shortTaskId(task.id)}</span> : null}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={handleDuplicate} disabled={!task || createTask.isPending} aria-label="复制任务">
+              <Copy size={14} strokeWidth={1.5} /> 复制
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
+              <X size={18} strokeWidth={1.5} />
+            </Button>
+          </div>
         </div>
 
         {isLoading || !task ? (
@@ -147,11 +172,52 @@ export function TaskDrawer({
                       </SelectContent>
                     </Select>
                   </Field>
+                  <Field label="任务编号">
+                    <div className="flex h-10 items-center gap-1 rounded-[var(--radius-input)] border border-border bg-surface-warm px-3">
+                      <span className="font-mono text-sm text-fg-2">#{shortTaskId(task.id)}</span>
+                      <button
+                        type="button"
+                        aria-label="复制任务编号"
+                        onClick={() => {
+                          const text = `#${shortTaskId(task.id)}`;
+                          if (navigator.clipboard) {
+                            navigator.clipboard.writeText(text)
+                              .then(() => toast.success("任务编号已复制"))
+                              .catch(() => toast.error("复制失败"));
+                          }
+                        }}
+                        className="ml-auto rounded-sm p-1 text-meta transition-colors hover:text-fg"
+                      >
+                        <Copy size={13} strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  </Field>
+                  <Field label="开始日期">
+                    <Input
+                      type="date"
+                      value={task.start_date || ""}
+                      onChange={(e) => {
+                        const v = e.target.value || null;
+                        if (v && task.due_date && v > task.due_date) {
+                          toast.error("开始日期不能晚于截止日期");
+                          return;
+                        }
+                        updateTask.mutate({ taskId: task.id, req: { start_date: v } });
+                      }}
+                    />
+                  </Field>
                   <Field label="截止日期">
                     <Input
                       type="date"
                       value={task.due_date || ""}
-                      onChange={(e) => updateTask.mutate({ taskId: task.id, req: { due_date: e.target.value || null } })}
+                      onChange={(e) => {
+                        const v = e.target.value || null;
+                        if (v && task.start_date && v < task.start_date) {
+                          toast.error("截止日期不能早于开始日期");
+                          return;
+                        }
+                        updateTask.mutate({ taskId: task.id, req: { due_date: v } });
+                      }}
                     />
                   </Field>
                 </div>
@@ -201,6 +267,69 @@ export function TaskDrawer({
                       rows={3}
                     />
                   </Field>
+                </div>
+
+                {/* 子任务清单 */}
+                <div className="border-t border-border px-4 py-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-meta">
+                    <ListChecks size={14} strokeWidth={1.5} /> 子任务
+                    {progress.total > 0 ? (
+                      <span className="ml-auto font-normal">{progress.done}/{progress.total} 已完成</span>
+                    ) : null}
+                  </p>
+                  <div className="mb-2 space-y-1.5">
+                    {(task.checklist || []).map((item) => (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <Checkbox
+                          checked={item.done}
+                          aria-label={`勾选 ${item.text}`}
+                          onCheckedChange={(checked) => {
+                            const next: ChecklistItem[] = (task.checklist || []).map((x) =>
+                              x.id === item.id ? { ...x, done: checked === true } : x,
+                            );
+                            updateTask.mutate({ taskId: task.id, req: { checklist: next } });
+                          }}
+                        />
+                        <span className={cn("min-w-0 flex-1 truncate text-sm", item.done ? "text-meta line-through" : "text-fg-2")}>
+                          {item.text}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`删除子任务 ${item.text}`}
+                          onClick={() => {
+                            const next = (task.checklist || []).filter((x) => x.id !== item.id);
+                            updateTask.mutate({ taskId: task.id, req: { checklist: next } });
+                          }}
+                          className="rounded-sm p-1 text-meta transition-colors hover:text-danger"
+                        >
+                          <X size={13} strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                    {(task.checklist || []).length === 0 ? (
+                      <p className="text-xs text-meta">还没有子任务，拆解一下更容易推进。</p>
+                    ) : null}
+                  </div>
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const text = newItem.trim();
+                      if (!text) return;
+                      const next = [...(task.checklist || []), newChecklistItem(text)];
+                      if (next.length > 50) {
+                        toast.error("子任务最多 50 项");
+                        return;
+                      }
+                      updateTask.mutate({ taskId: task.id, req: { checklist: next } });
+                      setNewItem("");
+                    }}
+                  >
+                    <Input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="添加子任务…" aria-label="新子任务内容" />
+                    <Button type="submit" size="sm" variant="secondary" aria-label="添加子任务">
+                      <Plus size={14} strokeWidth={1.5} />
+                    </Button>
+                  </form>
                 </div>
 
                 {/* 评论 */}

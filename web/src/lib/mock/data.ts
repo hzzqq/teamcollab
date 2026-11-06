@@ -96,6 +96,7 @@ export function seedDb(): MockDb {
     created_at: now,
     updated_at: now,
     labels: [],
+    checklist: [],
   });
 
   const tasks: Record<string, Task[]> = {

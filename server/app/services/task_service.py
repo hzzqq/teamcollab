@@ -38,6 +38,11 @@ class TaskService:
             due_date=data.due_date,
             start_date=data.start_date,
             created_by=actor.id,
+            checklist=(
+                [item.model_dump() for item in data.checklist]
+                if data.checklist is not None
+                else None
+            ),
         )
         db.flush()
         if data.label_ids:
@@ -154,6 +159,8 @@ class TaskService:
             task.due_date = data.due_date
         if "start_date" in fields:
             task.start_date = data.start_date
+        if "checklist" in fields and data.checklist is not None:
+            task.checklist = [item.model_dump() for item in data.checklist]
         if "label_ids" in fields and data.label_ids is not None:
             self._ensure_labels_belong_to_team(db, team_id, data.label_ids)
             label_repo.replace_task_labels(db, task.id, data.label_ids)

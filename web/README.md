@@ -56,6 +56,13 @@ src/
 - 命中任务跳 `/boards/{boardId}?task={taskId}` 深链，自动打开 TaskDrawer；↑↓ 选择、↵ 打开、Esc 关闭
 - 搜索支持 real / mock 双通道；纯逻辑在 `src/lib/shortcuts.ts`，单测见 `tests/shortcuts.test.mjs`
 
+## 任务详情
+
+- Drawer 支持开始/截止日期（含前后端双重顺序校验）、状态/优先级/负责人/标签/描述即时保存
+- 任务编号取 UUID 去连字符前 8 位（`#xxxxxxxx`），可一键复制；**不是自增序号**，不引入序列列
+- 「复制任务」保留全部字段并给标题加「(副本)」，子任务清单会重新生成 id；复制后自动打开副本
+- 子任务清单走 `PATCH /tasks/{id}` 整体覆盖，`src/lib/task-detail.ts` 为纯逻辑（编号/进度/复制请求）
+
 ## 验证
 
 ```bash

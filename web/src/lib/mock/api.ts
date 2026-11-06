@@ -332,6 +332,7 @@ export const mockApi = {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       labels: [],
+      checklist: req.checklist ?? [],
     };
     db.tasks[req.column_id] = [...(db.tasks[req.column_id] || []), task];
     return delay(ok(task));

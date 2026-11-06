@@ -157,6 +157,12 @@ export interface BoardDetail {
   columns: BoardColumnWithTasks[];
 }
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   board_id: string;
@@ -175,6 +181,7 @@ export interface Task {
   created_at: string;
   updated_at: string;
   labels: Label[];
+  checklist: ChecklistItem[];
 }
 
 /** 团队级标签（team 资源，与 board 无关） */
@@ -243,6 +250,7 @@ export interface CreateTaskRequest {
   due_date?: string | null;
   start_date?: string | null;
   label_ids?: string[];
+  checklist?: ChecklistItem[];
 }
 
 export interface UpdateTaskRequest {
@@ -255,6 +263,7 @@ export interface UpdateTaskRequest {
   due_date?: string | null;
   start_date?: string | null;
   label_ids?: string[];
+  checklist?: ChecklistItem[];
 }
 
 export interface CreateLabelRequest {

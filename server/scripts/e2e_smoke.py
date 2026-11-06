@@ -9,7 +9,6 @@
 """
 
 import sys
-import time
 import uuid
 from datetime import date
 

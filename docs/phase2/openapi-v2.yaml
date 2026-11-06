@@ -1,3 +1,6 @@
+# 注意：本文件是 Phase 2 时期的历史契约快照（19 路径 / 27 方法），仅用于追溯当时设计，不再随代码更新。
+# 当前运行时的完整契约见 docs/openapi-runtime.json（由 app.openapi() 自动生成、CI 漂移门禁守卫）。
+# 同步方式：cd server && python scripts/sync_openapi.py
 openapi: 3.0.3
 info:
   title: TeamCollab MVP API

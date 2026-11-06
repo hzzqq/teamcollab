@@ -11,7 +11,6 @@
 任何一方改动拖拽契约，都必须同步修改本文件，否则这里会红。
 """
 
-import uuid
 
 import pytest
 
@@ -68,7 +67,7 @@ def test_contract_cross_column_move_uses_target_column_in_path(client, team_with
     """
     t = team_with_members
     board_id = t["board"]["id"]
-    col0, col1 = t["columns"][0], t["columns"][1]
+    col1 = t["columns"][1]
     headers = t["owner"]["headers"]
 
     resp = _move(client, board_id, col1, t["task"]["id"], 0, headers)
@@ -146,7 +145,6 @@ def test_contract_cross_column_move_repacks_target_column_positions(client, team
         headers=headers,
     )
     assert resp.status_code == 201, resp.text
-    target_task = resp.json()["data"]["id"]
 
     # 另建一个任务从待办列拖入目标列（position 0），目标列应变成 2 个任务、position 0,1
     resp = client.post(

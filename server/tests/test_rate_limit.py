@@ -1,6 +1,5 @@
 """速率限制器：窗口过期重置 + 内存水位上限淘汰 + Redis 多实现（多实例共享计数）。"""
 
-import time
 
 import pytest
 

@@ -7,7 +7,7 @@
 本文件锁死「本地明天到期必须能触发提醒」这一行为。
 """
 
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from app.services.due_soon_service import due_soon_window
 

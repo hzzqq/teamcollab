@@ -33,7 +33,7 @@ def test_create_and_list_labels(client, team_with_members):
     # 列表（viewer 可见）
     r = client.get(f"/api/v1/teams/{team_id}/labels", headers=viewer)
     assert r.status_code == 200
-    ids = [l["id"] for l in r.json()["data"]]
+    ids = [lbl["id"] for lbl in r.json()["data"]]
     assert label_id in ids
 
 
@@ -71,7 +71,7 @@ def test_update_and_delete_label(client, team_with_members):
     r = client.delete(f"/api/v1/teams/{team_id}/labels/{label_id}", headers=owner)
     assert r.status_code == 200
     # 已删除：列表不再包含
-    ids = [l["id"] for l in client.get(f"/api/v1/teams/{team_id}/labels", headers=owner).json()["data"]]
+    ids = [lbl["id"] for lbl in client.get(f"/api/v1/teams/{team_id}/labels", headers=owner).json()["data"]]
     assert label_id not in ids
 
 
@@ -91,7 +91,7 @@ def test_assign_labels_to_task(client, team_with_members):
         headers=member,
     )
     assert r.status_code == 200, r.text
-    assert any(l["id"] == label_id for l in r.json()["data"])
+    assert any(lbl["id"] == label_id for lbl in r.json()["data"])
 
     # viewer 不可赋值
     r = client.put(
@@ -118,7 +118,7 @@ def test_create_task_with_label_ids(client, team_with_members):
     )
     assert r.status_code == 201, r.text
     labels = r.json()["data"]["labels"]
-    assert any(l["id"] == label_id for l in labels)
+    assert any(lbl["id"] == label_id for lbl in labels)
 
 
 def test_update_task_label_ids(client, team_with_members):
@@ -136,7 +136,7 @@ def test_update_task_label_ids(client, team_with_members):
         headers=owner,
     )
     assert r.status_code == 200, r.text
-    got = {l["id"] for l in r.json()["data"]["labels"]}
+    got = {lbl["id"] for lbl in r.json()["data"]["labels"]}
     assert got == {label_a, label_b}
 
     # 清空
@@ -152,7 +152,6 @@ def test_update_task_label_ids(client, team_with_members):
 def test_cross_team_label_rejected(client, team_with_members):
     """另一个团队的标签不能被本团队任务引用（400）。"""
     t = team_with_members
-    team_id = t["team_id"]
     task_id = t["task"]["id"]
     owner = t["owner"]["headers"]
 
@@ -193,7 +192,7 @@ def test_filter_tasks_by_label_and_priority(client, team_with_members):
     assert r.status_code == 200, r.text
     items = r.json()["data"]["items"]
     assert len(items) >= 1
-    assert all(any(l["id"] == label_id for l in it["labels"]) for it in items)
+    assert all(any(lbl["id"] == label_id for lbl in it["labels"]) for it in items)
 
     # 按 priority 过滤
     r = client.get(f"/api/v1/boards/{board_id}/tasks?priority=high", headers=owner)

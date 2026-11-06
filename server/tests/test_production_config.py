@@ -5,7 +5,6 @@
 2. SSE 长连接独占 DB 连接 → 长连接期间连接池 checkedout 必须保持为 0。
 """
 
-import os
 
 import pytest
 from fastapi.testclient import TestClient

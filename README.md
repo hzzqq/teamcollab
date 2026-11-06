@@ -13,13 +13,14 @@
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
 | 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest 162 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单 + 11 活动流）；前端 45 单测 + tsc + ESLint + `next build`；浏览器 E2E 六套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流） |
+| 测试 | 后端 pytest 162 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单 + 11 活动流） + ruff 全绿 + OpenAPI 契约漂移门禁；前端 45 单测 + tsc + ESLint + `next build`；浏览器 E2E 六套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流） |
 
 ## 目录
 
 ```
 docs/            # Phase 1 三文档 + Spec v1.0 + Phase 2 设计系统（契约）
 docs/v1.0-release.md  # v1.0 发布文档（功能清单 / 验收证据 / 已知限制 / 部署形态）
+docs/openapi-runtime.json # 运行时 OpenAPI 契约（自动生成，31 路径 / 44 方法，CI 漂移门禁）
 web/             # Next.js 前端（10 路由，含 /admin 后台）
 server/          # FastAPI 后端（44 端点 / 11 表 / 6 个迁移，头 0006）
 docker-compose.yml  # PostgreSQL 17（pgvector 镜像）
@@ -91,7 +92,7 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 - API e2e 冒烟（`server/scripts/e2e_smoke.py`，真实起服）：覆盖注册/登录/**me/me-teams/创建团队**/看板/任务/评论/**跨列拖拽 + 源列写法拒绝 + position 连续性**/我的任务/通知/RBAC/SSE/CORS/到期提醒 —— **26/26 全绿**
 - **多实例三件套验证**（`server/scripts/multi_instance_verify.py`，跨进程真实验证）：SSE 广播跨实例 / 限流计数跨实例共享 / 超限跨实例生效 / 调度器 advisory lock 互斥 —— 全部通过
 - **验收主线 E2E**（`web/e2e/mainline-e2e.js`，真实浏览器 Playwright）：Spec §2 注册→建板→邀请→成员入队→分配+SSE 实时通知→状态更新→全局视图。脚本已提升到受跟踪路径（原 `.pgtmp` 被 gitignore，CI 拉不到）；浏览器选择可移植——本地 Windows 用系统 Edge，CI 回退 Playwright 自带 chromium
-- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + pytest + API e2e 冒烟 + 多实例验证；frontend：npm ci + tsc + lint + test + build；**e2e-browser**：构建前端 + 起前后端 + Playwright chromium 跑验收主线 E2E）
+- CI：GitHub Actions push/PR 自动回归（backend：PG+Redis 容器 + **ruff 全绿 + OpenAPI 契约漂移检查** + pytest + API e2e 冒烟 + 多实例验证；frontend：npm ci + tsc + lint + test + build；**e2e-browser**：构建前端 + 起前后端 + Playwright chromium 跑验收主线 E2E）
 - P0 门禁：全代码 emoji 零容忍、无紫粉渐变、图标 lucide 唯一
 
 ## 多租户与多团队

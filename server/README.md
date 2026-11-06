@@ -23,6 +23,7 @@ server/
 ├── alembic/                 # 迁移 0001~0006（头 0006_add_task_activities.py）
 ├── tests/                   # pytest + httpx TestClient（含 test_admin.py）
 ├── scripts/seed.py          # 开发种子数据
+├── scripts/sync_openapi.py  # 导出运行时 OpenAPI 契约快照 + CI 漂移检查
 ├── scripts/multi_instance_verify.py  # 双进程多实例验证（SSE/限流/调度器）
 ├── requirements.txt         # 运行时依赖（版本锚定）
 └── requirements-dev.txt     # 开发依赖
@@ -63,7 +64,7 @@ python -m venv .venv
 
 ## 核心契约
 
-- **运行时 44 端点**（`v1/` 下 11 个路由模块）；`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，完整契约以运行时 `/docs` 为准
+- **运行时 44 端点**（`v1/` 下 11 个路由模块）；完整契约见 `docs/openapi-runtime.json`（由 `app.openapi()` 自动生成，31 路径 / 44 方法，CI `--check` 守卫漂移）。`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，仅作追溯，勿据此联调；运行时 `/docs` 亦可查
 - 全局搜索：`GET /api/v1/search?q=&limit=`，按 `team_members` 实时取 team_ids、经 `boards.team_id` 隔离（tasks 表无 team_id）；LIKE 通配符 `%` `_` 转义为字面量，结果含团队/看板/列面包屑供命令面板深链使用
 - 子任务清单：`tasks.checklist` 为数组型 JSONB（`[{id,text,done}]`，迁移 0005，默认 `[]`），随任务 create/PATCH 整体读写；服务端校验最多 50 项、text 非空、id 不重复。`start_date` 早于 `due_date` 由 Pydantic 与 DB check 双重保证
 - 活动流：`task_activities`（迁移 0006）记 `created / field_changed / moved / comment_added` 四类事件；`GET /tasks/{id}/activities?limit=` viewer+ 可读、按 `created_at` 倒序，租户经 `require_task_roles` 校验。日志与业务写在**同一事务**提交；值落人类可读审计文本（状态中文 / 人名 / 列名），`actor_name` 为名字快照。埋点覆盖 task create / PATCH 字段 diff / 跨列移动 / 评论 / `PUT /tasks/{id}/labels`；幂等 PATCH 与同列排序不产生日志。任务删除经 FK 级联清理
@@ -87,8 +88,10 @@ python -m venv .venv
 # 测试（注意：tests/conftest.py 会 TRUNCATE 业务表，跑完须重跑 seed 恢复演示数据）
 .venv/Scripts/python -m pytest tests/ -q
 
-# 静态检查
+# 静态检查 + 契约快照（新增/修改端点后必须重新生成快照再提交）
 .venv/Scripts/python -m ruff check app/ tests/ scripts/
+.venv/Scripts/python scripts/sync_openapi.py            # 重新生成 docs/openapi-runtime.json
+.venv/Scripts/python scripts/sync_openapi.py --check   # CI 漂移检查（不一致退出 1）
 
 # 种子数据
 .venv/Scripts/python -m scripts.seed

@@ -55,6 +55,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Static checks (ruff + OpenAPI contract drift)
+        run: |
+          python -m ruff check app/ tests/ scripts/
+          python scripts/sync_openapi.py --check
+
       - name: Run migrations
         run: python -m alembic upgrade head
 

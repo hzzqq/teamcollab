@@ -7,7 +7,11 @@ import { ThemeToggle } from "./theme-toggle";
 
 function titleForPath(pathname: string): string {
   if (pathname.startsWith("/boards/")) return "看板";
+  if (pathname === "/boards") return "团队看板";
   if (pathname.startsWith("/me/tasks")) return "我的任务";
+  if (pathname === "/projects") return "项目";
+  if (pathname.startsWith("/admin")) return "管理后台";
+  if (pathname.includes("/settings")) return "团队设置";
   if (pathname.includes("/members")) return "团队成员";
   if (pathname === "/login" || pathname === "/register") return "";
   return "任务协作";

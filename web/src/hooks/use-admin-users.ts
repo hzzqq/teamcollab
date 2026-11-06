@@ -8,10 +8,11 @@ export function adminUsersQueryKey() {
   return ["admin", "users"];
 }
 
-export function useAdminUsers() {
+export function useAdminUsers(enabled = true) {
   return useQuery({
     queryKey: adminUsersQueryKey(),
     queryFn: () => api.adminUsers(),
+    enabled,
   });
 }
 

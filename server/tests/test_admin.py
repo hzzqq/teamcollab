@@ -138,3 +138,34 @@ def test_demote_last_superuser_blocked(client):
     )
     assert r.status_code == 400
     assert r.json()["code"] == 40001
+
+
+def test_admin_created_user_can_login_and_me(client):
+    """回归：后台新建用户必须自带默认团队。
+
+    早期实现只建 user 不建 team，导致 login/me 组装的 team=None 不满足
+    AuthData/MeData 的非空约束 → 登录直接 500，账号完全不可用。
+    """
+    admin = register_user(client)
+    _promote(admin["user"]["id"])
+    email = f"admin-created-{uuid.uuid4().hex[:8]}@example.com"
+    r = client.post(
+        "/api/v1/admin/users",
+        json={"email": email, "password": "pass1234", "display_name": "后台新建"},
+        headers=admin["headers"],
+    )
+    assert r.status_code == 201
+
+    r = client.post("/api/v1/auth/login", data={"username": email, "password": "pass1234"})
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    assert data["team"]["name"] == "后台新建 的团队"
+    assert data["role"] == "owner"
+
+    headers = {"Authorization": f"Bearer {data['access_token']}"}
+    r = client.get("/api/v1/me", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["data"]["user"]["email"] == email
+    r = client.get("/api/v1/me/teams", headers=headers)
+    assert r.status_code == 200
+    assert len(r.json()["data"]) == 1

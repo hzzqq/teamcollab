@@ -69,10 +69,9 @@ export function Sidebar({
   onToggle: () => void;
 }) {
   const pathname = usePathname();
-  const { data: me, isLoading } = useMe();
+  const { data: me, isLoading, isSuperuser } = useMe();
   const teamId = me?.team?.id;
   const isAdmin = canAdmin(me?.role);
-  const isSuperuser = Boolean(me?.user?.is_superuser);
 
   // 「设置」(标签管理) 为 admin 专属页面的入口，仅对管理员可见；
   // 「管理后台」为平台级超级管理员专属入口。

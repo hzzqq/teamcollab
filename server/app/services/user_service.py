@@ -18,6 +18,7 @@ from app.core.security import hash_password
 from app.models.team import Team
 from app.models.team_member import TeamMember
 from app.models.user import User
+from app.repositories.team_repo import team_repo
 from app.repositories.user_repo import user_repo
 
 
@@ -59,7 +60,14 @@ class UserService:
         if user_repo.get_by_email(db, email):
             raise conflict("该邮箱已注册")
         user = user_repo.create(db, email, hash_password(password), display_name)
+        db.flush()  # 主键由 DB server_default 生成，取 user.id 前需 flush
         user.is_superuser = is_superuser
+        # 与 auth_service.register 保持一致：每个用户自带默认团队并成为 owner。
+        # 否则 login/me 组装出的 team=None 会让 AuthData/MeData 校验失败（登录直接 500），
+        # 后台新建的账号将完全无法使用。
+        team = team_repo.create(db, f"{display_name} 的团队"[:100])
+        db.flush()
+        team_repo.add_member(db, team.id, user.id, "owner")
         db.commit()
         return user
 

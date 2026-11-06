@@ -54,6 +54,9 @@ export function useMe() {
   return {
     ...meQuery,
     data: meQuery.data && team ? { user: meQuery.data.user, team, role: active!.role } : undefined,
+    // 平台级超级管理员标记直接取自 /me 的 user，刻意不依赖 team：
+    // 无团队用户（如后台新建账号）data 会是 undefined，但不该因此丢失管理员身份判定。
+    isSuperuser: Boolean(meQuery.data?.user?.is_superuser),
     isLoading: meQuery.isLoading || teamsQuery.isLoading,
     isError: meQuery.isError || teamsQuery.isError,
     refetch: async () => {

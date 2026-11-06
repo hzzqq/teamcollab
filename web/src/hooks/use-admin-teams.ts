@@ -7,9 +7,10 @@ export function adminTeamsQueryKey() {
   return ["admin", "teams"];
 }
 
-export function useAdminTeams() {
+export function useAdminTeams(enabled = true) {
   return useQuery({
     queryKey: adminTeamsQueryKey(),
     queryFn: () => api.adminTeams(),
+    enabled,
   });
 }

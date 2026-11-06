@@ -37,11 +37,13 @@ function fmtDate(iso: string): string {
 }
 
 export default function AdminPage() {
-  const { data: me } = useMe();
-  const isSuperuser = Boolean(me?.user?.is_superuser);
+  const { isSuperuser, isLoading: meLoading } = useMe();
+  // 身份未加载完前不拉取 /admin 数据：既避免首屏闪「无访问权限」，
+  // 也避免非管理员直接访问时打出两发无谓的 403。
+  const canLoad = isSuperuser && !meLoading;
 
-  const { data: users, isLoading, isError, refetch } = useAdminUsers();
-  const { data: teams } = useAdminTeams();
+  const { data: users, isLoading, isError, refetch } = useAdminUsers(canLoad);
+  const { data: teams } = useAdminTeams(canLoad);
 
   const createUser = useAdminCreateUser();
   const updateUser = useAdminUpdateUser();
@@ -60,6 +62,15 @@ export default function AdminPage() {
     () => (users ? users.filter((u) => u.is_superuser).length : 0),
     [users],
   );
+
+  // 加载中先给骨架，不能因为 me 尚未返回就误判为「无访问权限」
+  if (meLoading) {
+    return (
+      <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">
+        <SkeletonRows rows={5} />
+      </div>
+    );
+  }
 
   if (!isSuperuser) {
     return (

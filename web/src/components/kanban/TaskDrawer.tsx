@@ -16,9 +16,17 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useMe } from "@/hooks/use-me";
+import { useMe, canWrite } from "@/hooks/use-me";
 import { useMembers } from "@/hooks/use-members";
-import { useTaskDetail, useUpdateTask, useDeleteTask, useCreateTask } from "@/hooks/use-board";
+import {
+  useTaskDetail,
+  useUpdateTask,
+  useDeleteTask,
+  useCreateTask,
+  useBoards,
+  useMoveTaskToBoard,
+} from "@/hooks/use-board";
+import { api } from "@/lib/api";
 import { useLabels, useAssignTaskLabels } from "@/hooks/use-labels";
 import { useComments, useCreateComment } from "@/hooks/use-comments";
 import { useActivities } from "@/hooks/use-activities";
@@ -75,7 +83,10 @@ export function TaskDrawer({
   const { data: comments, isLoading: commentsLoading } = useComments(taskId || "");
   const createComment = useCreateComment(taskId || "");
   const { data: activityData, isLoading: activitiesLoading } = useActivities(taskId);
+  const { data: teamBoards } = useBoards(me?.team?.id || "");
+  const moveToBoard = useMoveTaskToBoard();
 
+  const writable = canWrite(me?.role);
   const teamId = me?.team?.id || "";
   const { data: teamLabels } = useLabels(teamId);
   const assignLabels = useAssignTaskLabels(boardId);
@@ -100,6 +111,26 @@ export function TaskDrawer({
         router.replace(`/boards/${boardId}`);
       },
     });
+  }
+
+  async function handleMoveToBoard(targetBoardId: string) {
+    if (!task || targetBoardId === task.board_id) return;
+    try {
+      const detail = await api.boardDetail(targetBoardId);
+      const firstColumn = detail.columns[0];
+      if (!firstColumn) {
+        toast.error("目标看板还没有列，请先创建");
+        return;
+      }
+      await moveToBoard.mutateAsync({
+        taskId: task.id,
+        req: { board_id: targetBoardId, column_id: firstColumn.id, position: 0 },
+      });
+      toast.success(`已移动到「${detail.name}」`);
+      router.push(`/boards/${targetBoardId}?task=${task.id}`);
+    } catch {
+      toast.error("移动失败，请重试");
+    }
   }
 
   async function handleDuplicate() {
@@ -239,6 +270,31 @@ export function TaskDrawer({
                         updateTask.mutate({ taskId: task.id, req: { due_date: v } });
                       }}
                     />
+                  </Field>
+                </div>
+
+                {/* 跨看板移动（同团队，自动落到目标看板第一列） */}
+                <div className="px-4 pb-1">
+                  <Field label="所属看板">
+                    <Select
+                      value=""
+                      onValueChange={handleMoveToBoard}
+                      disabled={!writable || moveToBoard.isPending}
+                    >
+                      <SelectTrigger aria-label="移动到看板">
+                        <SelectValue placeholder={task.board_name || "选择其他看板…"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(teamBoards || [])
+                          .filter((b) => b.id !== task.board_id)
+                          .map((b) => (
+                            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                          ))}
+                        {(teamBoards || []).filter((b) => b.id !== task.board_id).length === 0 ? (
+                          <div className="px-2 py-1.5 text-xs text-meta">暂无其他看板</div>
+                        ) : null}
+                      </SelectContent>
+                    </Select>
                   </Field>
                 </div>
 

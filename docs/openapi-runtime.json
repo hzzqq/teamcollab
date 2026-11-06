@@ -1603,6 +1603,136 @@
         }
       }
     },
+    "/api/v1/tasks/batch": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Batch Tasks",
+        "description": "批量改状态/优先级/负责人或删除；任一任务越权整批拒绝。",
+        "operationId": "batch_tasks_api_v1_tasks_batch_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{task_id}/move-to-board": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Move Task To Board",
+        "description": "把任务移动到同一团队下的另一个看板（目标列必须属于目标看板）。",
+        "operationId": "move_task_to_board_api_v1_tasks__task_id__move_to_board_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveToBoardRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks/{task_id}/activities": {
       "get": {
         "tags": [
@@ -3247,6 +3377,87 @@
         "type": "object",
         "title": "AuthResponse"
       },
+      "BatchResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "BatchResponse"
+      },
+      "BatchResult": {
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated"
+        ],
+        "title": "BatchResult"
+      },
+      "BatchTaskRequest": {
+        "properties": {
+          "task_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Task Ids"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "set_status",
+              "set_priority",
+              "set_assignee",
+              "delete"
+            ],
+            "title": "Action"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_ids",
+          "action"
+        ],
+        "title": "BatchTaskRequest",
+        "description": "一次批量操作；任一任务越权则整批拒绝，不做部分更新。"
+      },
       "BoardCreateRequest": {
         "properties": {
           "name": {
@@ -4164,6 +4375,32 @@
         },
         "type": "object",
         "title": "MemberResponse"
+      },
+      "MoveToBoardRequest": {
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Board Id"
+          },
+          "column_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Column Id"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Position",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "board_id",
+          "column_id"
+        ],
+        "title": "MoveToBoardRequest"
       },
       "NotificationOut": {
         "properties": {

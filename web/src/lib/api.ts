@@ -16,6 +16,8 @@ import type {
   AdminUser,
   ActivityList,
   ApiEnvelope,
+  BatchResult,
+  BatchTaskRequest,
   AuthResponse,
   Board,
   BoardDetail,
@@ -27,6 +29,7 @@ import type {
   Label,
   Member,
   MoveTaskRequest,
+  MoveToBoardRequest,
   Paginated,
   PaginatedNotifications,
   RefreshResponse,
@@ -275,6 +278,18 @@ export const api = {
   async moveTask(boardId: string, columnId: string, taskId: string, req: MoveTaskRequest): Promise<Task> {
     if (API_MODE === "mock") return unwrap(await mockApi.moveTask(boardId, columnId, taskId, req));
     return rawRequest(`/api/v1/boards/${boardId}/columns/${columnId}/tasks/${taskId}/position`, "PATCH", { body: req });
+  },
+
+  /** 把任务移动到同一团队的另一个看板（目标列必须属于目标看板） */
+  async moveTaskToBoard(taskId: string, req: MoveToBoardRequest): Promise<Task> {
+    if (API_MODE === "mock") return unwrap(await mockApi.moveTaskToBoard(taskId, req));
+    return rawRequest(`/api/v1/tasks/${taskId}/move-to-board`, "POST", { body: req });
+  },
+
+  /** 批量改状态/优先级/负责人或删除（任一任务越权整批拒绝） */
+  async batchTasks(req: BatchTaskRequest): Promise<BatchResult> {
+    if (API_MODE === "mock") return unwrap(await mockApi.batchTasks(req));
+    return rawRequest("/api/v1/tasks/batch", "POST", { body: req });
   },
 
   /** 任务操作日志时间线（viewer+，后端按 created_at 倒序） */

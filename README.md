@@ -13,16 +13,16 @@
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
 | 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest 162 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单 + 11 活动流） + ruff 全绿 + OpenAPI 契约漂移门禁；前端 45 单测 + tsc + ESLint + `next build`；浏览器 E2E 六套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流） |
+| 测试 | 后端 pytest 173 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单 + 11 活动流 + 11 任务操作） + ruff 全绿 + OpenAPI 契约漂移门禁；前端 52 单测 + tsc + ESLint + `next build`；浏览器 E2E 七套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流 / 列表视图） |
 
 ## 目录
 
 ```
 docs/            # Phase 1 三文档 + Spec v1.0 + Phase 2 设计系统（契约）
 docs/v1.0-release.md  # v1.0 发布文档（功能清单 / 验收证据 / 已知限制 / 部署形态）
-docs/openapi-runtime.json # 运行时 OpenAPI 契约（自动生成，31 路径 / 44 方法，CI 漂移门禁）
-web/             # Next.js 前端（10 路由，含 /admin 后台）
-server/          # FastAPI 后端（44 端点 / 11 表 / 6 个迁移，头 0006）
+docs/openapi-runtime.json # 运行时 OpenAPI 契约（自动生成，33 路径 / 46 方法，CI 漂移门禁）
+web/             # Next.js 前端（11 路由，含 /admin 后台）
+server/          # FastAPI 后端（46 端点 / 11 表 / 6 个迁移，头 0006）
 docker-compose.yml  # PostgreSQL 17（pgvector 镜像）
 .pgtmp/          # 本地 PG 17.5 实例（本机无 Docker daemon 时的替代，含数据目录）
 ```
@@ -84,7 +84,7 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 
 ## 验证状态（2026-11-05 历史快照）
 
-> 本节保留当时的验收证据；**当前基线**见顶部「技术栈」表格（后端 162 / 前端 45 / E2E 六套 / 头 0006）。
+> 本节保留当时的验收证据；**当前基线**见顶部「技术栈」表格（后端 173 / 前端 52 / E2E 七套 / 头 0006）。
 
 - 后端：pytest **129 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**/**列删除非空保护**/**通知单条已读（含跨用户隔离 404）**）
 - 前端：tsc 0 错误、ESLint 0 警告、**单元测试 25/25**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）
@@ -187,6 +187,20 @@ cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
 | 大看板虚拟滚动 | **暂未实施**：Spec §9 仅 >1000 任务/看板触发；当前数据量远低于阈值，且 dnd-kit 虚拟化集成脆弱、易回归拖拽契约，属投机代码；待数据量真实逼近阈值时再按 `@tanstack/react-virtual` + 活跃拖拽项保序方案落地 | 决策记录 |
 
 > 边界自检：本批次仅做通知中心既有页面的交互完善与文案复核，未引入任何 Backlog（F6–F12）功能，符合 `PROJECT_BOUNDARY.md` 锁定范围。
+
+## 列表视图 / 批量操作 / 跨看板移动（2026-11-06 批次 4B）
+
+看板协作本分内的三个效率功能，前端 real / mock 双通道等价，后端全部走同一租户与角色守卫。
+
+| 项 | 约定 | 落地位置 |
+|----|------|---------|
+| 视图切换 | 看板头部「看板 / 列表」切换，`?view=list` 写进 URL；刷新与分享链接可还原同一视角 | `board-view.tsx` + `task-table.tsx` |
+| 筛选/排序 URL 化 | `label` / `priority` / `assignee` 与 `view` 共存于 URL，`router.replace` 增量改参不丢其他参数；表格按任务/状态/优先级/负责人/截止日期/所在列表头排序 | `board-view.tsx` `setParams` + `lib/task-table.ts` |
+| 批量操作 | `POST /tasks/batch`（最多 50 项）支持 `set_status / set_priority / set_assignee / delete`；**先全量校验租户与 member+ 角色，任一越权整批拒绝，不做部分更新**；逐任务写活动日志，幂等不刷屏 | `task_ops_service.batch` + 表格批量工具条 |
+| 跨看板移动 | `POST /tasks/{id}/move-to-board`：目标看板须同团队（跨租户 40401）、目标列须属目标看板（40001）；源/目标列 position 均压紧，同事务写 `moved` 活动，并向新旧两个看板广播 `board_update` | `task_ops_service.move_to_board` + Drawer「所属看板」 |
+| 纯逻辑单测 | `web/tests/task-table.test.mjs`（7 例）覆盖 flatten / 排序 / 无截止日期排后 / 筛选+排序组合 / `buildBatchRequest` / `nextSort` | `lib/task-table.ts` |
+
+> 关键坑：Node 原生 TS 剥离（`node --experimental-strip-types --test`）不走 bundler，`task-table.ts` 的值导入必须写 `./board-filter.ts` 显式扩展名，且 `tsconfig.json` 需 `allowImportingTsExtensions`；否则 `npm test` 直接 `ERR_MODULE_NOT_FOUND`。另：`TaskTable` 排序表头必须是「返回 JSX 的普通函数」，写成内联组件会让 React 每次渲染重挂表头、点击排序时元素 detach。
 
 ## 已修复的关键缺陷（2026-11-05 评审批次）
 

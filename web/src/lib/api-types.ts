@@ -354,3 +354,23 @@ export interface ActivityList {
   items: TaskActivity[];
   total: number;
 }
+
+/* ---------------- 跨看板移动 / 批量操作 ---------------- */
+
+export interface MoveToBoardRequest {
+  board_id: string;
+  column_id: string;
+  position?: number;
+}
+
+export type BatchAction = "set_status" | "set_priority" | "set_assignee" | "delete";
+
+export interface BatchTaskRequest {
+  task_ids: string[];
+  action: BatchAction;
+  value?: string | null;
+}
+
+export interface BatchResult {
+  updated: number;
+}

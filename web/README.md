@@ -70,6 +70,15 @@ src/
 - 文案拼装在纯函数 `src/lib/activity-format.ts`（字段名映射 + 长文本裁剪），单测见 `tests/activity-format.test.mjs`；后端已把值转成可读审计文本，前端不反查
 - real / mock 双通道等价：`mock/data.ts` 带历史活动种子，`mock/api.ts` 在相同写操作上埋点，纯前端演示也能看到时间线增长
 
+## 列表 / 表格视图与批量操作
+
+- 看板头部提供「看板视图 / 列表视图」切换，`?view=list` 写进 URL；`label` / `priority` / `assignee` 筛选参数与视图参数共存，切换视图时增量改参不丢条件
+- 表格复用 `useBoard()` 的 `columns` 做 flatten，纯函数 `src/lib/task-table.ts` 负责筛选 + 排序（状态/优先级按业务顺序而非字典序，无截止日期排末尾）；单测见 `tests/task-table.test.mjs`
+- 勾选行后出现批量工具条：改状态 / 改优先级 / 改负责人 / 删除（二次确认）；批量请求走 `POST /tasks/batch`，成功后失效看板、我的任务、活动流与各任务详情缓存
+- `viewer` 只读角色下复选框禁用、工具条不出现，与后端角色守卫一致
+- Drawer「所属看板」下拉可把任务移到**同团队**其他看板（自动落到目标看板第一列），`useMoveTaskToBoard` 成功后跳到目标看板并保留 `?task=` 深链；real / mock 双通道等价
+- 注意：Node 原生 TS 单测不走 bundler，`task-table.ts` 值导入要带 `.ts` 扩展名（`tsconfig.json` 已开 `allowImportingTsExtensions`）
+
 ## 验证
 
 ```bash

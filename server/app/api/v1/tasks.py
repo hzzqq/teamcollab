@@ -5,10 +5,12 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_board_roles, require_task_roles
+from app.api.deps import get_current_user, require_board_roles, require_task_roles
 from app.core.db import get_db
+from app.models.user import User
 from app.schemas.common import OkResponse
 from app.schemas.task_activity import TaskActivityListResponse
+from app.schemas.task_ops import BatchResponse, BatchTaskRequest, MoveToBoardRequest
 from app.schemas.task import (
     PaginatedTasks,
     TaskCreateRequest,
@@ -17,6 +19,7 @@ from app.schemas.task import (
     TaskUpdateRequest,
 )
 from app.services.task_activity_service import task_activity_service
+from app.services.task_ops_service import task_ops_service
 from app.services.task_service import task_service
 
 router = APIRouter(tags=["tasks"])
@@ -82,6 +85,29 @@ def get_task(
     db: Session = Depends(get_db),
 ):
     task = task_service.get(db, task_id, ctx.team_id)
+    return {"code": 0, "data": task, "message": ""}
+
+
+@router.post("/tasks/batch", response_model=BatchResponse)
+def batch_tasks(
+    payload: BatchTaskRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """批量改状态/优先级/负责人或删除；任一任务越权整批拒绝。"""
+    updated = task_ops_service.batch(db, user, payload)
+    return {"code": 0, "data": {"updated": updated}, "message": ""}
+
+
+@router.post("/tasks/{task_id}/move-to-board", response_model=TaskResponse)
+def move_task_to_board(
+    task_id: uuid.UUID,
+    payload: MoveToBoardRequest,
+    ctx=Depends(require_task_roles(*ROLE_MEMBER_PLUS)),
+    db: Session = Depends(get_db),
+):
+    """把任务移动到同一团队下的另一个看板（目标列必须属于目标看板）。"""
+    task = task_ops_service.move_to_board(db, task_id, ctx.team_id, payload, ctx.user)
     return {"code": 0, "data": task, "message": ""}
 
 

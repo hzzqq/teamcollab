@@ -9,6 +9,8 @@ import type {
   AdminUser,
   ActivityList,
   ApiEnvelope,
+  BatchResult,
+  BatchTaskRequest,
   AuthResponse,
   Board,
   BoardDetail,
@@ -20,6 +22,7 @@ import type {
   Label,
   Member,
   MoveTaskRequest,
+  MoveToBoardRequest,
   Paginated,
   PaginatedNotifications,
   RefreshResponse,
@@ -533,6 +536,72 @@ export const mockApi = {
       });
     }
     return delay(ok(target[pos]));
+  },
+
+  /** 跨看板移动：目标列必须属于目标看板，源/目标列 position 压紧 */
+  async moveTaskToBoard(taskId: string, req: MoveToBoardRequest): Promise<ApiEnvelope<Task>> {
+    let moved: Task | null = null;
+    for (const key of Object.keys(db.tasks)) {
+      const found = db.tasks[key].find((t) => t.id === taskId);
+      if (found) {
+        moved = found;
+        db.tasks[key] = db.tasks[key].filter((t) => t.id !== taskId);
+      }
+    }
+    if (!moved) return delay(err(40401, "任务不存在"));
+    const source = moved;
+    const oldLabel = `${db.boards.find((b) => b.id === source.board_id)?.name ?? "?"} / ${columnName(source.column_id)}`;
+    const newLabel = `${db.boards.find((b) => b.id === req.board_id)?.name ?? "?"} / ${columnName(req.column_id)}`;
+    const target = db.tasks[req.column_id] || [];
+    const pos = Math.max(0, Math.min(req.position ?? 0, target.length));
+    target.splice(pos, 0, {
+      ...source,
+      board_id: req.board_id,
+      column_id: req.column_id,
+      position: pos,
+      updated_at: new Date().toISOString(),
+    });
+    db.tasks[req.column_id] = target;
+    logActivity(taskId, { action: "moved", field: "column", old_value: oldLabel, new_value: newLabel });
+    return delay(ok(target[pos]));
+  },
+
+  /** 批量操作：与真实后端一致，逐任务写活动日志、幂等不留痕 */
+  async batchTasks(req: BatchTaskRequest): Promise<ApiEnvelope<BatchResult>> {
+    const ids = [...new Set(req.task_ids)];
+    if (req.action === "delete") {
+      for (const key of Object.keys(db.tasks)) {
+        db.tasks[key] = db.tasks[key].filter((t) => !ids.includes(t.id));
+      }
+      return delay(ok({ updated: ids.length }));
+    }
+    for (const id of ids) {
+      let before: Task | undefined;
+      for (const key of Object.keys(db.tasks)) {
+        before = before || db.tasks[key].find((t) => t.id === id);
+      }
+      if (!before) continue;
+      let patch: Partial<Task>;
+      if (req.action === "set_assignee") {
+        const uid = req.value || null;
+        patch = {
+          assignee_id: uid,
+          assignee: uid
+            ? { id: uid, display_name: db.users.find((u) => u.id === uid)?.display_name || "" }
+            : null,
+        };
+      } else if (req.action === "set_status") {
+        patch = { status: (req.value || "todo") as Task["status"] };
+      } else {
+        patch = { priority: (req.value || "medium") as Task["priority"] };
+      }
+      const after: Task = { ...before, ...patch, updated_at: new Date().toISOString() };
+      for (const key of Object.keys(db.tasks)) {
+        db.tasks[key] = db.tasks[key].map((t) => (t.id === id ? after : t));
+      }
+      logTaskChanges(id, before, after);
+    }
+    return delay(ok({ updated: ids.length }));
   },
 
   /** 活动流时间线（最新在前，limit 截断但 total 保留全量） */

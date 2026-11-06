@@ -3,7 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { applyOptimisticMove } from "@/lib/drag-position";
-import type { BoardDetail, CreateTaskRequest, MoveTaskRequest } from "@/lib/api-types";
+import type {
+  BatchTaskRequest,
+  BoardDetail,
+  CreateTaskRequest,
+  MoveTaskRequest,
+  MoveToBoardRequest,
+} from "@/lib/api-types";
 
 export function boardQueryKey(boardId: string) {
   return ["board", boardId];
@@ -159,6 +165,35 @@ export function useMoveTask(boardId: string) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
       qc.invalidateQueries({ queryKey: ["task-activities"] });
+    },
+  });
+}
+
+/** 批量改状态/优先级/负责人或删除 */
+export function useBatchTasks(boardId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: BatchTaskRequest) => api.batchTasks(req),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
+      qc.invalidateQueries({ queryKey: ["me-tasks"] });
+      qc.invalidateQueries({ queryKey: ["task-activities"] });
+      for (const id of vars.task_ids) qc.invalidateQueries({ queryKey: ["task", id] });
+    },
+  });
+}
+
+/** 跨看板移动：新旧看板详情都要失效 */
+export function useMoveTaskToBoard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, req }: { taskId: string; req: MoveToBoardRequest }) =>
+      api.moveTaskToBoard(taskId, req),
+    onSuccess: (task) => {
+      qc.invalidateQueries({ queryKey: ["board"] });
+      qc.invalidateQueries({ queryKey: ["me-tasks"] });
+      qc.invalidateQueries({ queryKey: ["task", task.id] });
+      qc.invalidateQueries({ queryKey: ["task-activities", task.id] });
     },
   });
 }

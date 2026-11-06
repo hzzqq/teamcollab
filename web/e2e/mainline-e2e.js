@@ -152,7 +152,8 @@ async function launchBrowser() {
     await selectRadix(pm, drawer.locator("label", { hasText: "负责人" }), "主线成员");
     const due = new Date();
     const iso = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
-    await drawer.locator('input[type="date"]').fill(iso);
+    // Drawer 同时有开始日期/截止日期两个 date 输入，用 aria-label 精确定位
+    await drawer.locator('input[aria-label="截止日期"]').fill(iso);
     await pm.waitForTimeout(1000);
     await drawer.getByRole("button", { name: "关闭" }).click();
     await pm.waitForTimeout(600);

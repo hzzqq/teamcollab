@@ -195,6 +195,7 @@ export function TaskDrawer({
                   <Field label="开始日期">
                     <Input
                       type="date"
+                      aria-label="开始日期"
                       value={task.start_date || ""}
                       onChange={(e) => {
                         const v = e.target.value || null;
@@ -209,6 +210,7 @@ export function TaskDrawer({
                   <Field label="截止日期">
                     <Input
                       type="date"
+                      aria-label="截止日期"
                       value={task.due_date || ""}
                       onChange={(e) => {
                         const v = e.target.value || null;

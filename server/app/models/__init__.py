@@ -5,6 +5,7 @@ from app.models.board import Board
 from app.models.board_column import BoardColumn
 from app.models.label import Label, task_labels
 from app.models.notification import Notification
+from app.models.saved_view import SavedView
 from app.models.task import Task
 from app.models.task_activity import TaskActivity
 from app.models.task_comment import TaskComment
@@ -21,6 +22,7 @@ __all__ = [
     "BoardColumn",
     "Task",
     "TaskActivity",
+    "SavedView",
     "TaskComment",
     "Notification",
     "Label",

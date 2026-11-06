@@ -84,16 +84,51 @@ class TaskRepo:
         return db.scalar(select(func.count()).select_from(Task).where(Task.column_id == column_id)) or 0
 
     def list_by_columns(self, db: Session, column_ids: list[uuid.UUID]) -> list[Task]:
-        """看板详情批量加载（避免 N+1），按列 + position 排序。"""
+        """看板详情批量加载（避免 N+1），按列 + position 排序。
+
+        只返回顶层任务（parent_id is null）——多层级子任务由 Drawer 的子任务区块单独加载，
+        保持看板主视图干净，避免子任务污染列卡片。
+        """
         if not column_ids:
             return []
         return list(
             db.scalars(
                 _base_task_query()
-                .where(Task.column_id.in_(column_ids))
+                .where(Task.column_id.in_(column_ids), Task.parent_id.is_(None))
                 .order_by(Task.column_id.asc(), Task.position.asc(), Task.created_at.asc())
             )
         )
+
+    def list_subtasks(self, db: Session, parent_id: uuid.UUID) -> list[Task]:
+        """直接子任务（一层），按创建时间排序。"""
+        return list(
+            db.scalars(
+                _base_task_query()
+                .where(Task.parent_id == parent_id)
+                .order_by(Task.created_at.asc())
+            )
+        )
+
+    def count_subtasks(self, db: Session, parent_id: uuid.UUID) -> int:
+        return (
+            db.scalar(
+                select(func.count())
+                .select_from(Task)
+                .where(Task.parent_id == parent_id)
+            )
+            or 0
+        )
+
+    def count_subtasks_batch(self, db: Session, parent_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """批量统计直接子任务数，一次查询，供看板/列表批量标注层级用。"""
+        if not parent_ids:
+            return {}
+        rows = db.execute(
+            select(Task.parent_id, func.count())
+            .where(Task.parent_id.in_(parent_ids))
+            .group_by(Task.parent_id)
+        ).all()
+        return {pid: cnt for pid, cnt in rows}
 
     def list_by_board(
         self,

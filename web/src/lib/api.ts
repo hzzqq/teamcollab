@@ -24,6 +24,7 @@ import type {
   Comment,
   CreateCommentRequest,
   CreateLabelRequest,
+  CreateSavedViewRequest,
   CreateTaskRequest,
   InviteMemberRequest,
   Label,
@@ -35,10 +36,14 @@ import type {
   RefreshResponse,
   RegisterRequest,
   Role,
+  SavedView,
+  SavedViewListData,
   SearchResult,
+  SubtaskCreateRequest,
   Task,
   Team,
   UpdateLabelRequest,
+  UpdateSavedViewRequest,
   UpdateTaskRequest,
   UserTeam,
 } from "./api-types";
@@ -373,6 +378,46 @@ export const api = {
   async assignTaskLabels(taskId: string, labelIds: string[]): Promise<Label[]> {
     if (API_MODE === "mock") return unwrap(await mockApi.assignTaskLabels(taskId, labelIds));
     return rawRequest(`/api/v1/tasks/${taskId}/labels`, "PUT", { body: { label_ids: labelIds } });
+  },
+
+  /* ---------------- 子任务 / 多层级（方案 A parent_id 树状） ---------------- */
+
+  /** 创建子任务：继承父任务的 board / column，position 追加到列尾（member+） */
+  async createSubtask(parentId: string, req: SubtaskCreateRequest): Promise<Task> {
+    if (API_MODE === "mock") return unwrap(await mockApi.createSubtask(parentId, req));
+    return rawRequest(`/api/v1/tasks/${parentId}/subtasks`, "POST", { body: req });
+  },
+
+  /** 列出某任务的直接子任务（viewer+） */
+  async listSubtasks(parentId: string): Promise<Task[]> {
+    if (API_MODE === "mock") return unwrap(await mockApi.listSubtasks(parentId));
+    return rawRequest(`/api/v1/tasks/${parentId}/subtasks`, "GET");
+  },
+
+  /* ---------------- 保存视图（团队级命名筛选 + 排序） ---------------- */
+
+  /** 团队全部命名视图（viewer+，按创建时间升序） */
+  async listViews(teamId: string): Promise<SavedViewListData> {
+    if (API_MODE === "mock") return unwrap(await mockApi.listViews(teamId));
+    return rawRequest(`/api/v1/teams/${teamId}/views`, "GET");
+  },
+
+  /** 创建命名视图（member+） */
+  async createView(teamId: string, req: CreateSavedViewRequest): Promise<SavedView> {
+    if (API_MODE === "mock") return unwrap(await mockApi.createView(teamId, req));
+    return rawRequest(`/api/v1/teams/${teamId}/views`, "POST", { body: req });
+  },
+
+  /** 更新命名视图（owner / 团队管理员） */
+  async updateView(teamId: string, viewId: string, req: UpdateSavedViewRequest): Promise<SavedView> {
+    if (API_MODE === "mock") return unwrap(await mockApi.updateView(teamId, viewId, req));
+    return rawRequest(`/api/v1/teams/${teamId}/views/${viewId}`, "PUT", { body: req });
+  },
+
+  /** 删除命名视图（owner / 团队管理员） */
+  async deleteView(teamId: string, viewId: string): Promise<{ ok: boolean }> {
+    if (API_MODE === "mock") return unwrap(await mockApi.deleteView(teamId, viewId));
+    return rawRequest(`/api/v1/teams/${teamId}/views/${viewId}`, "DELETE");
   },
 
   /** SSE 通知流 URL（EventSource 无法自定义 Header，走 query token） */

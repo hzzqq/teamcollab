@@ -13,6 +13,8 @@ from app.schemas.task_activity import TaskActivityListResponse
 from app.schemas.task_ops import BatchResponse, BatchTaskRequest, MoveToBoardRequest
 from app.schemas.task import (
     PaginatedTasks,
+    SubtaskCreateRequest,
+    SubtaskListResponse,
     TaskCreateRequest,
     TaskMoveRequest,
     TaskResponse,
@@ -37,6 +39,27 @@ def create_task(
 ):
     task = task_service.create(db, board_id, ctx.team_id, payload, ctx.user)
     return {"code": 0, "data": task, "message": ""}
+
+
+@router.post("/tasks/{task_id}/subtasks", response_model=TaskResponse, status_code=201)
+def create_subtask(
+    task_id: uuid.UUID,
+    payload: SubtaskCreateRequest,
+    ctx=Depends(require_task_roles(*ROLE_MEMBER_PLUS)),
+    db: Session = Depends(get_db),
+):
+    task = task_service.create_subtask(db, task_id, ctx.team_id, payload, ctx.user)
+    return {"code": 0, "data": task, "message": ""}
+
+
+@router.get("/tasks/{task_id}/subtasks", response_model=SubtaskListResponse)
+def list_subtasks(
+    task_id: uuid.UUID,
+    ctx=Depends(require_task_roles(*ROLE_VIEWER_PLUS)),
+    db: Session = Depends(get_db),
+):
+    items = task_service.get_subtasks(db, task_id, ctx.team_id)
+    return {"code": 0, "data": items, "message": ""}
 
 
 @router.get("/boards/{board_id}/tasks", response_model=PaginatedTasks)

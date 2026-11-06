@@ -45,6 +45,9 @@ export function TaskTable({
   filter,
   writable,
   onOpenTask,
+  sortKey,
+  sortDir,
+  onSortChange,
 }: {
   boardId: string;
   teamId: string;
@@ -52,18 +55,25 @@ export function TaskTable({
   filter: BoardFilter;
   writable: boolean;
   onOpenTask: (taskId: string) => void;
+  /** 受控排序：由看板页从 URL 接管（保存视图可捕获）；不传则用组件内部状态 */
+  sortKey?: SortKey;
+  sortDir?: SortDir;
+  onSortChange?: (key: SortKey, dir: SortDir) => void;
 }) {
   const batch = useBatchTasks(boardId);
   const { data: members } = useMembers(teamId);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sortKey, setSortKey] = useState<SortKey>("title");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [internalKey, setInternalKey] = useState<SortKey>("title");
+  const [internalDir, setInternalDir] = useState<SortDir>("asc");
   const [batchNonce, setBatchNonce] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const effectiveKey = onSortChange ? (sortKey as SortKey) : internalKey;
+  const effectiveDir = onSortChange ? (sortDir as SortDir) : internalDir;
+
   const rows = useMemo(
-    () => tableRows(columns, filter, sortKey, sortDir),
-    [columns, filter, sortKey, sortDir],
+    () => tableRows(columns, filter, effectiveKey, effectiveDir),
+    [columns, filter, effectiveKey, effectiveDir],
   );
   const allIds = rows.map((r) => r.task.id);
   const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
@@ -92,16 +102,21 @@ export function TaskTable({
 
   // 注意：这里必须是「返回 JSX 的函数」而不是内联组件——
   // 内联组件每次渲染都是新类型，React 会重挂整个表头，点击排序时容易触发元素 detach。
+  function handleSort(k: SortKey) {
+    const next = nextSort(effectiveKey, k, effectiveDir);
+    if (onSortChange) onSortChange(next.key, next.dir);
+    else {
+      setInternalKey(next.key);
+      setInternalDir(next.dir);
+    }
+  }
+
   function sortHeader(label: string, k: SortKey) {
-    const active = sortKey === k;
+    const active = effectiveKey === k;
     return (
       <button
         type="button"
-        onClick={() => {
-          const next = nextSort(sortKey, k, sortDir);
-          setSortKey(next.key);
-          setSortDir(next.dir);
-        }}
+        onClick={() => handleSort(k)}
         aria-label={`按${label}排序`}
         className={cn(
           "inline-flex items-center gap-1 rounded-sm px-1 py-1 font-medium transition-colors hover:text-fg",
@@ -110,7 +125,7 @@ export function TaskTable({
       >
         {label}
         {active ? (
-          sortDir === "asc" ? <ArrowUp size={12} strokeWidth={1.75} /> : <ArrowDown size={12} strokeWidth={1.75} />
+          effectiveDir === "asc" ? <ArrowUp size={12} strokeWidth={1.75} /> : <ArrowDown size={12} strokeWidth={1.75} />
         ) : null}
       </button>
     );
@@ -202,6 +217,7 @@ export function TaskTable({
               <th className="px-3 py-2.5">{sortHeader("优先级", "priority")}</th>
               <th className="px-3 py-2.5">{sortHeader("负责人", "assignee")}</th>
               <th className="px-3 py-2.5">{sortHeader("截止日期", "due_date")}</th>
+              <th className="px-3 py-2.5 text-meta">子任务</th>
               <th className="px-3 py-2.5">{sortHeader("所在列", "column")}</th>
             </tr>
           </thead>
@@ -237,6 +253,16 @@ export function TaskTable({
                 <td className="px-3 py-2.5 text-xs text-fg-2">{task.assignee?.display_name || "未分配"}</td>
                 <td className={cn("px-3 py-2.5 text-xs", dueState(task.due_date, task.status) === "overdue" ? "text-danger" : "text-fg-2")}>
                   {task.due_date ? formatDate(task.due_date) : "—"}
+                </td>
+                <td className="px-3 py-2.5 text-xs text-meta">
+                  {task.subtask_count > 0 ? (
+                    <span className="inline-flex items-center gap-0.5" title={`${task.subtask_count} 个下属子任务`}>
+                      <span className="size-1.5 rounded-full bg-primary-500" />
+                      {task.subtask_count}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-3 py-2.5 text-xs text-meta">{columnName}</td>
               </tr>

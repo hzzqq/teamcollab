@@ -9,12 +9,15 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { TaskDrawer } from "@/components/kanban/TaskDrawer";
 import { BoardFilters } from "@/components/kanban/board-filters";
 import { TaskTable } from "@/components/kanban/task-table";
+import { ViewSwitcher } from "@/components/kanban/view-switcher";
 import type { BoardFilter } from "@/lib/board-filter";
 import { useMe, canWrite, canAdmin } from "@/hooks/use-me";
 import { useBoard, useUpdateBoard, useDeleteBoard } from "@/hooks/use-board";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { SavedView } from "@/lib/api-types";
+import type { SortDir, SortKey } from "@/lib/task-table";
 
 export default function BoardView({ boardId }: { boardId: string }) {
   const router = useRouter();
@@ -38,6 +41,9 @@ export default function BoardView({ boardId }: { boardId: string }) {
     priority: (searchParams.get("priority") as BoardFilter["priority"] | null) ?? null,
     assigneeId: searchParams.get("assignee"),
   };
+  // 列表视图排序也写进 URL，供保存视图捕获
+  const sortKey: SortKey = (searchParams.get("sort") as SortKey) || "title";
+  const sortDir: SortDir = (searchParams.get("dir") as SortDir) || "asc";
 
   function setParams(patch: Record<string, string | null>) {
     const url = new URL(window.location.href);
@@ -46,6 +52,32 @@ export default function BoardView({ boardId }: { boardId: string }) {
       else url.searchParams.delete(key);
     }
     router.replace(`${url.pathname}${url.search}`);
+  }
+
+  /** 应用一个已保存的命名视图：把其视图类型 / 筛选 / 排序写回 URL */
+  function applyView(v: SavedView) {
+    const url = new URL(window.location.href);
+    const f = v.filters || {};
+    if (v.view === "list") url.searchParams.set("view", "list");
+    else url.searchParams.delete("view");
+    if (f.label_id) url.searchParams.set("label", f.label_id);
+    else url.searchParams.delete("label");
+    if (f.priority) url.searchParams.set("priority", f.priority);
+    else url.searchParams.delete("priority");
+    if (f.assignee_id) url.searchParams.set("assignee", f.assignee_id);
+    else url.searchParams.delete("assignee");
+    if (v.view === "list") {
+      url.searchParams.set("sort", v.sort_key || "title");
+      url.searchParams.set("dir", v.sort_dir || "asc");
+    } else {
+      url.searchParams.delete("sort");
+      url.searchParams.delete("dir");
+    }
+    router.replace(`${url.pathname}${url.search}`);
+  }
+
+  function onSortChange(key: SortKey, dir: SortDir) {
+    setParams({ sort: key, dir });
   }
 
   function openTask(id: string) {
@@ -118,6 +150,16 @@ export default function BoardView({ boardId }: { boardId: string }) {
           </>
         )}
         <div className="ml-auto flex items-center gap-2">
+          <ViewSwitcher
+            teamId={me?.team?.id || ""}
+            currentView={view}
+            filter={filter}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            role={me?.role}
+            currentUserId={me?.user?.id || ""}
+            onApplyView={applyView}
+          />
           <div className="flex items-center rounded-[var(--radius-input)] border border-border p-0.5" aria-label="视图切换">
             <button
               type="button"
@@ -181,11 +223,14 @@ export default function BoardView({ boardId }: { boardId: string }) {
           filter={filter}
           writable={writable}
           onOpenTask={openTask}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSortChange={onSortChange}
         />
       ) : (
         <KanbanBoard boardId={boardId} onOpenTask={openTask} filter={filter} />
       )}
-      <TaskDrawer taskId={taskId} boardId={boardId} onClose={closeTask} />
+      <TaskDrawer taskId={taskId} boardId={boardId} onClose={closeTask} onOpenTask={openTask} />
     </div>
   );
 }

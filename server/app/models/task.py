@@ -77,9 +77,26 @@ class Task(UUIDPkMixin, TimestampMixin, Base):
     checklist: Mapped[list[dict]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
     )
+    # 多层级：树状父任务（方案 A）。删除父任务时子任务 parent_id SET NULL 变为顶层，保留数据不误删
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
 
     assignee: Mapped["User | None"] = relationship("User", foreign_keys=[assignee_id], lazy="raise")
     board: Mapped["Board"] = relationship("Board", lazy="raise")
     labels: Mapped[list["Label"]] = relationship(  # noqa: F821
         "Label", secondary=task_labels, back_populates="tasks", lazy="raise"
+    )
+    parent: Mapped["Task | None"] = relationship(
+        "Task",
+        uselist=False,
+        remote_side="Task.id",
+        foreign_keys=[parent_id],
+        lazy="raise",
+    )
+    children: Mapped[list["Task"]] = relationship(
+        "Task",
+        foreign_keys=[parent_id],
+        lazy="raise",
+        overlaps="parent",
     )

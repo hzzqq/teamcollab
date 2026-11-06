@@ -11,7 +11,7 @@ from app.repositories.board_repo import board_repo
 from app.repositories.label_repo import label_repo
 from app.repositories.task_repo import task_repo
 from app.repositories.team_repo import team_repo
-from app.schemas.task import TaskCreateRequest, TaskUpdateRequest
+from app.schemas.task import SubtaskCreateRequest, TaskCreateRequest, TaskUpdateRequest
 from app.services.due_soon_service import due_soon_service
 from app.services.task_activity_service import task_activity_service
 from app.services.notification_service import notification_service
@@ -134,6 +134,91 @@ class TaskService:
             raise not_found("任务不存在")
         return task
 
+    def create_subtask(
+        self, db: Session, parent_id: uuid.UUID, team_id: uuid.UUID, data: SubtaskCreateRequest, actor: User
+    ) -> Task:
+        """创建子任务：继承父任务的 board / column，position 追加到列尾，parent_id 指向父。"""
+        parent = self.get(db, parent_id, team_id)
+        position = task_repo.max_position_in_column(db, parent.column_id) + 1
+        task = task_repo.create(
+            db,
+            board_id=parent.board_id,
+            column_id=parent.column_id,
+            title=data.title,
+            assignee_id=data.assignee_id,
+            priority=data.priority,
+            status=data.status,
+            position=position,
+            due_date=data.due_date,
+            start_date=data.start_date,
+            created_by=actor.id,
+            checklist=[],
+        )
+        task.parent_id = parent_id
+        db.flush()
+        task_activity_service.record_created(
+            db, task_id=task.id, team_id=team_id, actor=actor, title=task.title
+        )
+        if data.assignee_id and data.assignee_id != actor.id:
+            notification_service.create(
+                db,
+                team_id,
+                data.assignee_id,
+                "task_assigned",
+                {
+                    "task_id": str(task.id),
+                    "task_title": task.title,
+                    "board_id": str(parent.board_id),
+                    "actor_id": str(actor.id),
+                },
+            )
+        db.commit()
+        if data.assignee_id and data.assignee_id != actor.id:
+            notification_service.publish_board_update(
+                db,
+                team_id,
+                {
+                    "event": "task_created",
+                    "task_id": str(task.id),
+                    "board_id": str(parent.board_id),
+                },
+            )
+        # lazy='raise' 下响应序列化需要 assignee/labels 关系，重新加载带关联对象
+        task = task_repo.get_by_id(db, task.id)
+        if task is None:
+            raise not_found("子任务不存在")
+        return task
+
+    def get_subtasks(self, db: Session, parent_id: uuid.UUID, team_id: uuid.UUID) -> list[Task]:
+        parent = self.get(db, parent_id, team_id)
+        return task_repo.list_subtasks(db, parent.id)
+
+    def _set_parent(
+        self, db: Session, task: Task, new_parent_id: uuid.UUID | None, team_id: uuid.UUID
+    ) -> None:
+        """设置上级任务，含环检测；new_parent_id=None 解除层级变顶层。"""
+        if new_parent_id is None:
+            task.parent_id = None
+            return
+        if new_parent_id == task.id:
+            raise bad_request("不能把任务设为自己的上级")
+        parent = task_repo.get_by_id(db, new_parent_id)
+        if parent is None or parent.board.team_id != team_id:
+            raise not_found("上级任务不存在")
+        self._ensure_column_belongs_to_board(db, parent.column_id, parent.board_id)
+        # 环检测：沿新父的祖先链上行，遇到自身即成环
+        cur_id: uuid.UUID | None = parent.id
+        visited = 0
+        while cur_id is not None:
+            if cur_id == task.id:
+                raise bad_request("不能把任务移动到自己的子孙下")
+            cur = task_repo.get_by_id(db, cur_id)
+            cur_id = cur.parent_id if cur else None
+            visited += 1
+            if visited > 1000:
+                break  # 防御异常深链
+        task.parent_id = new_parent_id
+
     def update(
         self, db: Session, task_id: uuid.UUID, team_id: uuid.UUID, data: TaskUpdateRequest, actor: User
     ) -> Task:
@@ -166,6 +251,8 @@ class TaskService:
             task.start_date = data.start_date
         if "checklist" in fields and data.checklist is not None:
             task.checklist = [item.model_dump() for item in data.checklist]
+        if "parent_id" in fields:
+            self._set_parent(db, task, data.parent_id, team_id)
         if "label_ids" in fields and data.label_ids is not None:
             self._ensure_labels_belong_to_team(db, team_id, data.label_ids)
             label_repo.replace_task_labels(db, task.id, data.label_ids)

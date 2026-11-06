@@ -67,6 +67,8 @@ class TaskOut(BaseModel):
     updated_at: datetime
     labels: list[LabelOut] = []
     checklist: list[ChecklistItem] = []
+    parent_id: Optional[uuid.UUID] = None
+    subtask_count: int = 0
 
 
 class TaskResponse(ApiResponse[TaskOut]):
@@ -117,6 +119,7 @@ class TaskUpdateRequest(BaseModel):
     start_date: Optional[date] = None
     label_ids: Optional[list[uuid.UUID]] = None
     checklist: Optional[list[ChecklistItem]] = None
+    parent_id: Optional[uuid.UUID] = None
 
     @field_validator("title")
     @classmethod
@@ -138,3 +141,23 @@ class TaskUpdateRequest(BaseModel):
 class TaskMoveRequest(BaseModel):
     target_column_id: uuid.UUID
     position: int = Field(ge=0)
+
+
+class SubtaskCreateRequest(BaseModel):
+    """创建子任务：继承父任务的 board/column，position 追加到列尾。"""
+
+    title: str = Field(min_length=1, max_length=200)
+    assignee_id: Optional[uuid.UUID] = None
+    priority: Priority = "medium"
+    status: TaskStatus = "todo"
+    due_date: Optional[date] = None
+    start_date: Optional[date] = None
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, v: str) -> str:
+        return strip_non_blank(v)
+
+
+class SubtaskListResponse(ApiResponse[list[TaskOut]]):
+    pass

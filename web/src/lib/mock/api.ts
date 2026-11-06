@@ -17,6 +17,7 @@ import type {
   Comment,
   CreateCommentRequest,
   CreateLabelRequest,
+  CreateSavedViewRequest,
   CreateTaskRequest,
   InviteMemberRequest,
   Label,
@@ -28,12 +29,16 @@ import type {
   RefreshResponse,
   RegisterRequest,
   Role,
+  SavedView,
+  SavedViewListData,
   SearchResult,
+  SubtaskCreateRequest,
   Task,
   TaskActivity,
   TaskActivityAction,
   Team,
   UpdateLabelRequest,
+  UpdateSavedViewRequest,
   UpdateTaskRequest,
   User,
   UserTeam,
@@ -59,6 +64,14 @@ function err(code: number, message: string): ApiEnvelope<never> {
 function currentUser(): User {
   const id = db.session?.userId || "u-pm";
   return db.users.find((u) => u.id === id) || db.users[0];
+}
+
+function findTaskInDb(id: string): { task: Task; columnId: string } | null {
+  for (const [columnId, list] of Object.entries(db.tasks)) {
+    const found = list.find((t) => t.id === id);
+    if (found) return { task: found, columnId };
+  }
+  return null;
 }
 
 /* ---------------- 活动流埋点（与真实后端同构） ---------------- */
@@ -422,6 +435,8 @@ export const mockApi = {
       updated_at: new Date().toISOString(),
       labels: [],
       checklist: req.checklist ?? [],
+      parent_id: null,
+      subtask_count: 0,
     };
     db.tasks[req.column_id] = [...(db.tasks[req.column_id] || []), task];
     logActivity(task.id, { action: "created", new_value: task.title });
@@ -432,6 +447,47 @@ export const mockApi = {
     const task = Object.values(db.tasks).flat().find((t) => t.id === taskId);
     if (!task) return delay(err(40401, "任务不存在"));
     return delay(ok(task));
+  },
+
+  /** 创建子任务：继承父任务的 board / column，position 追加到列尾 */
+  async createSubtask(parentId: string, req: SubtaskCreateRequest): Promise<ApiEnvelope<Task>> {
+    const found = findTaskInDb(parentId);
+    if (!found) return delay(err(40401, "任务不存在"));
+    const child: Task = {
+      id: `tk-${++tokenSeq}`,
+      board_id: found.task.board_id,
+      board_name: found.task.board_name,
+      column_id: found.task.column_id,
+      title: req.title,
+      description: null,
+      assignee_id: req.assignee_id ?? null,
+      assignee: req.assignee_id
+        ? { id: req.assignee_id, display_name: db.users.find((u) => u.id === req.assignee_id)?.display_name || "" }
+        : null,
+      priority: req.priority || "medium",
+      status: req.status || "todo",
+      position: (db.tasks[found.task.column_id] || []).length,
+      due_date: req.due_date ?? null,
+      start_date: req.start_date ?? null,
+      created_by: currentUser().id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      labels: [],
+      checklist: [],
+      parent_id: parentId,
+      subtask_count: 0,
+    };
+    db.tasks[found.task.column_id] = [...(db.tasks[found.task.column_id] || []), child];
+    return delay(ok(child));
+  },
+
+  /** 列出直接子任务（按创建时间升序） */
+  async listSubtasks(parentId: string): Promise<ApiEnvelope<Task[]>> {
+    const items = Object.values(db.tasks)
+      .flat()
+      .filter((t) => t.parent_id === parentId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return delay(ok(items));
   },
 
   async updateTask(taskId: string, req: UpdateTaskRequest): Promise<ApiEnvelope<Task>> {
@@ -680,6 +736,51 @@ export const mockApi = {
     db.notifications = db.notifications.map((n) =>
       n.id === notificationId ? { ...n, is_read: true } : n
     );
+    return delay(ok({ ok: true }));
+  },
+
+  /* ---------------- 保存视图（团队级命名筛选 + 排序，mock 镜像） ---------------- */
+
+  async listViews(teamId: string): Promise<ApiEnvelope<SavedViewListData>> {
+    const items = db.views.filter((v) => v.team_id === teamId);
+    return delay(ok({ items, total: items.length }));
+  },
+
+  async createView(teamId: string, req: CreateSavedViewRequest): Promise<ApiEnvelope<SavedView>> {
+    const view: SavedView = {
+      id: `sv-${++tokenSeq}`,
+      team_id: teamId,
+      owner_id: currentUser().id,
+      name: req.name,
+      view: req.view,
+      filters: req.filters ?? {},
+      sort_key: req.sort_key ?? null,
+      sort_dir: req.sort_dir ?? null,
+      created_at: new Date().toISOString(),
+    };
+    db.views = [...db.views, view];
+    return delay(ok(view));
+  },
+
+  async updateView(teamId: string, viewId: string, req: UpdateSavedViewRequest): Promise<ApiEnvelope<SavedView>> {
+    const idx = db.views.findIndex((v) => v.id === viewId);
+    if (idx < 0) return delay(err(40401, "视图不存在"));
+    const prev = db.views[idx];
+    const updated: SavedView = {
+      ...prev,
+      ...(req.name !== undefined ? { name: req.name } : {}),
+      ...(req.view !== undefined ? { view: req.view } : {}),
+      ...(req.filters !== undefined ? { filters: req.filters } : {}),
+      ...(req.sort_key !== undefined ? { sort_key: req.sort_key } : {}),
+      ...(req.sort_dir !== undefined ? { sort_dir: req.sort_dir } : {}),
+    };
+    db.views = db.views.map((v, i) => (i === idx ? updated : v));
+    return delay(ok(updated));
+  },
+
+  async deleteView(teamId: string, viewId: string): Promise<ApiEnvelope<{ ok: boolean }>> {
+    if (!db.views.some((v) => v.id === viewId)) return delay(err(40401, "视图不存在"));
+    db.views = db.views.filter((v) => v.id !== viewId);
     return delay(ok({ ok: true }));
   },
 

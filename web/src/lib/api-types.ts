@@ -182,6 +182,10 @@ export interface Task {
   updated_at: string;
   labels: Label[];
   checklist: ChecklistItem[];
+  /** 上级任务（多层级方案 A：树状 parent_id，顶层为 null） */
+  parent_id: string | null;
+  /** 直接子任务数（看板详情批量统计，便于列表视图标注层级；其余接口默认 0） */
+  subtask_count: number;
 }
 
 /** 团队级标签（team 资源，与 board 无关） */
@@ -264,6 +268,62 @@ export interface UpdateTaskRequest {
   start_date?: string | null;
   label_ids?: string[];
   checklist?: ChecklistItem[];
+  /** 设为上级任务 id（多层级）；传 null 解除层级变为顶层 */
+  parent_id?: string | null;
+}
+
+/** 创建子任务：继承父任务的 board / column，position 追加到列尾 */
+export interface SubtaskCreateRequest {
+  title: string;
+  assignee_id?: string | null;
+  priority?: Priority;
+  status?: TaskStatus;
+  due_date?: string | null;
+  start_date?: string | null;
+}
+
+/* ---------------- 保存视图（团队级命名筛选 + 排序快照） ---------------- */
+
+/** 视图筛选条件，与客户端 BoardFilter 一一对应 */
+export interface ViewFilter {
+  label_id?: string | null;
+  priority?: Priority | null;
+  assignee_id?: string | null;
+}
+
+export interface SavedView {
+  id: string;
+  team_id: string;
+  owner_id: string;
+  name: string;
+  /** 视图类型：看板（board）或列表（list） */
+  view: "board" | "list";
+  /** 筛选快照，仅包含被设置的键 */
+  filters: ViewFilter;
+  sort_key?: string | null;
+  sort_dir?: string | null;
+  created_at: string;
+}
+
+export interface SavedViewListData {
+  items: SavedView[];
+  total: number;
+}
+
+export interface CreateSavedViewRequest {
+  name: string;
+  view: "board" | "list";
+  filters?: ViewFilter;
+  sort_key?: string | null;
+  sort_dir?: string | null;
+}
+
+export interface UpdateSavedViewRequest {
+  name?: string;
+  view?: "board" | "list";
+  filters?: ViewFilter;
+  sort_key?: string | null;
+  sort_dir?: string | null;
 }
 
 export interface CreateLabelRequest {

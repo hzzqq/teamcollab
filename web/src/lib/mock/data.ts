@@ -10,6 +10,7 @@ import type {
   Label,
   Member,
   NotificationItem,
+  SavedView,
   Task,
   TaskActivity,
   Team,
@@ -26,6 +27,7 @@ export interface MockDb {
   comments: Record<string, Comment[]>; // taskId -> comments
   activities: Record<string, TaskActivity[]>; // taskId -> 活动日志（最新在前）
   labels: Record<string, Label[]>; // teamId -> labels（团队级）
+  views: SavedView[]; // 团队级命名视图（按创建时间升序）
   notifications: NotificationItem[];
   session: { access: string; refresh: string; userId: string } | null;
 }
@@ -103,6 +105,8 @@ export function seedDb(): MockDb {
     updated_at: now,
     labels: [],
     checklist: [],
+    parent_id: null,
+    subtask_count: 0,
   });
 
   const tasks: Record<string, Task[]> = {
@@ -214,6 +218,7 @@ export function seedDb(): MockDb {
     comments,
     activities,
     labels,
+    views: [],
     notifications,
     session: null,
   };
@@ -226,11 +231,21 @@ export function seedDb(): MockDb {
  * 导致「新建看板」打开后仍显示 b-1 的三列（mock/real 行为漂移）。
  */
 export function taskToColumns(db: MockDb, boardId: string): BoardColumnWithTasks[] {
+  // 一次性统计每个顶层任务的直接子任务数，与真实后端 board_service 同口径
+  const childCount: Record<string, number> = {};
+  for (const colTasks of Object.values(db.tasks)) {
+    for (const t of colTasks) {
+      if (t.parent_id) childCount[t.parent_id] = (childCount[t.parent_id] || 0) + 1;
+    }
+  }
   return (db.columns[boardId] || [])
     .slice()
     .sort((a, b) => a.position - b.position)
     .map((c) => ({
       ...c,
-      tasks: (db.tasks[c.id] || []).slice().sort((a, b) => a.position - b.position),
+      tasks: (db.tasks[c.id] || [])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((t) => ({ ...t, subtask_count: childCount[t.id] || 0 })),
     }));
 }

@@ -27,10 +27,17 @@ class BoardService:
         board = self._get_owned(db, board_id, team_id)
         columns = board_repo.list_columns_by_board(db, board_id)
         tasks_by_column: dict[uuid.UUID, list] = defaultdict(list)
+        top_level: list = []
         if columns:
             col_ids = [c.id for c in columns]
             for task in task_repo.list_by_columns(db, col_ids):
                 tasks_by_column[task.column_id].append(task)
+                top_level.append(task)
+        # 一次性批量统计每个顶层任务的直接子任务数，挂到对象上供前端列表视图展示层级
+        if top_level:
+            counts = task_repo.count_subtasks_batch(db, [t.id for t in top_level])
+            for t in top_level:
+                t.subtask_count = counts.get(t.id, 0)  # 非映射字段，序列化时由 from_attributes 读取
         return {
             "id": board.id,
             "team_id": board.team_id,

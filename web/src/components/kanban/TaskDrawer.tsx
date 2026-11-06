@@ -8,6 +8,7 @@ import {
   Copy,
   Flag,
   History,
+  Layers,
   ListChecks,
   MessageSquare,
   Pencil,
@@ -30,6 +31,7 @@ import { api } from "@/lib/api";
 import { useLabels, useAssignTaskLabels } from "@/hooks/use-labels";
 import { useComments, useCreateComment } from "@/hooks/use-comments";
 import { useActivities } from "@/hooks/use-activities";
+import { useSubtasks, useCreateSubtask, useToggleSubtask, useDeleteSubtask } from "@/hooks/use-subtasks";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -67,10 +69,12 @@ export function TaskDrawer({
   taskId,
   boardId,
   onClose,
+  onOpenTask,
 }: {
   taskId: string | null;
   boardId: string;
   onClose: () => void;
+  onOpenTask: (id: string) => void;
 }) {
   const router = useRouter();
   const { data: me } = useMe();
@@ -85,6 +89,10 @@ export function TaskDrawer({
   const { data: activityData, isLoading: activitiesLoading } = useActivities(taskId);
   const { data: teamBoards } = useBoards(me?.team?.id || "");
   const moveToBoard = useMoveTaskToBoard();
+  const { data: subtasks } = useSubtasks(taskId);
+  const createSubtask = useCreateSubtask(taskId || "", boardId);
+  const toggleSubtask = useToggleSubtask(taskId || "", boardId);
+  const deleteSubtask = useDeleteSubtask(taskId || "", boardId);
 
   const writable = canWrite(me?.role);
   const teamId = me?.team?.id || "";
@@ -93,6 +101,7 @@ export function TaskDrawer({
 
   const [title, setTitle] = useState("");
   const [newItem, setNewItem] = useState("");
+  const [subtaskTitle, setSubtaskTitle] = useState("");
   const [showAllActivities, setShowAllActivities] = useState(false);
   const knownNames = new Set((members ?? []).map((m) => m.user.display_name));
   const progress = checklistProgress(task?.checklist);
@@ -406,6 +415,79 @@ export function TaskDrawer({
                       <Plus size={14} strokeWidth={1.5} />
                     </Button>
                   </form>
+                </div>
+
+                {/* 子任务（层级）：真实子任务，继承父任务看板/列，可单独打开 */}
+                <div className="border-t border-border px-4 py-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-meta">
+                    <Layers size={14} strokeWidth={1.5} /> 子任务（层级）
+                    {subtasks && subtasks.length > 0 ? (
+                      <span className="ml-auto font-normal">
+                        {subtasks.filter((s) => s.status === "done").length}/{subtasks.length} 已完成
+                      </span>
+                    ) : null}
+                  </p>
+                  <div className="mb-2 space-y-1.5">
+                    {(subtasks || []).map((s) => (
+                      <div key={s.id} className="flex items-center gap-2">
+                        <Checkbox
+                          checked={s.status === "done"}
+                          aria-label={`标记 ${s.title} 完成`}
+                          onCheckedChange={(checked) =>
+                            toggleSubtask.mutate({ id: s.id, status: checked === true ? "done" : "todo" })
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onOpenTask(s.id)}
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-left text-sm transition-colors",
+                            s.status === "done" ? "text-meta line-through" : "text-fg-2 hover:text-primary-600",
+                          )}
+                        >
+                          {s.title}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`删除子任务 ${s.title}`}
+                          onClick={() => deleteSubtask.mutate(s.id)}
+                          className="rounded-sm p-1 text-meta transition-colors hover:text-danger"
+                        >
+                          <X size={13} strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ))}
+                    {(subtasks || []).length === 0 ? (
+                      <p className="text-xs text-meta">还没有下属子任务，拆解为独立任务更好追踪。</p>
+                    ) : null}
+                  </div>
+                  {writable ? (
+                    <form
+                      className="flex items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const text = subtaskTitle.trim();
+                        if (!text) return;
+                        createSubtask.mutate(
+                          { title: text },
+                          {
+                            onSuccess: () => setSubtaskTitle(""),
+                            onError: () => toast.error("创建子任务失败"),
+                          },
+                        );
+                      }}
+                    >
+                      <Input
+                        value={subtaskTitle}
+                        onChange={(e) => setSubtaskTitle(e.target.value)}
+                        placeholder="添加子任务…"
+                        aria-label="新子任务标题"
+                      />
+                      <Button type="submit" size="sm" variant="secondary" aria-label="添加子任务" disabled={createSubtask.isPending}>
+                        <Plus size={14} strokeWidth={1.5} />
+                      </Button>
+                    </form>
+                  ) : null}
                 </div>
 
                 {/* 评论 */}

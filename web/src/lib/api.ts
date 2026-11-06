@@ -14,6 +14,7 @@ import type {
   AdminTeam,
   AdminUpdateUserRequest,
   AdminUser,
+  ActivityList,
   ApiEnvelope,
   AuthResponse,
   Board,
@@ -274,6 +275,12 @@ export const api = {
   async moveTask(boardId: string, columnId: string, taskId: string, req: MoveTaskRequest): Promise<Task> {
     if (API_MODE === "mock") return unwrap(await mockApi.moveTask(boardId, columnId, taskId, req));
     return rawRequest(`/api/v1/boards/${boardId}/columns/${columnId}/tasks/${taskId}/position`, "PATCH", { body: req });
+  },
+
+  /** 任务操作日志时间线（viewer+，后端按 created_at 倒序） */
+  async activities(taskId: string, limit = 50): Promise<ActivityList> {
+    if (API_MODE === "mock") return unwrap(await mockApi.activities(taskId, limit));
+    return rawRequest(`/api/v1/tasks/${taskId}/activities?limit=${limit}`, "GET");
   },
 
   async comments(taskId: string): Promise<Paginated<Comment>> {

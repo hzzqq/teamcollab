@@ -74,5 +74,5 @@ def set_task_labels(
     ctx=Depends(require_task_roles(*ROLE_MEMBER_PLUS)),
     db: Session = Depends(get_db),
 ):
-    task = label_service.set_task_labels(db, ctx.team_id, task_id, payload)
+    task = label_service.set_task_labels(db, ctx.team_id, task_id, payload, ctx.user)
     return {"code": 0, "data": task.labels, "message": ""}

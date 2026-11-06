@@ -15,6 +15,7 @@ from app.repositories.comment_repo import comment_repo
 from app.repositories.task_repo import task_repo
 from app.repositories.team_repo import team_repo
 from app.services.notification_service import notification_service
+from app.services.task_activity_service import task_activity_service
 
 # @ 后跟 display_name 或邮箱前缀（支持中文/字母/数字/._+-）
 _MENTION_RE = re.compile(r"@([\w\u4e00-\u9fff][\w\u4e00-\u9fff.+-]*)")
@@ -39,9 +40,12 @@ class CommentService:
         mentions = self._detect_mentions(db, team_id, content, exclude_id=actor.id)
         # JSONB 列以字符串形式落库（psycopg json.dumps 不支持 UUID 对象）
         comment = comment_repo.create(
-            db, task_id, actor.id, content, mentions=[str(m) for m in mentions]
+            db, task_id, actor.id, content,             mentions=[str(m) for m in mentions]
         )
         db.flush()
+        task_activity_service.record_comment(
+            db, task_id=task.id, team_id=team_id, actor=actor, content=content
+        )
 
         notifications: list = []
         for uid in mentions:

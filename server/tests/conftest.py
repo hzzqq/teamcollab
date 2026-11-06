@@ -40,7 +40,7 @@ def client() -> TestClient:
         )
     # 测试可重复性：每个 session 开始时清空业务表（固定邮箱用例避免跨轮冲突）
     _TRUNCATE = (
-        "TRUNCATE TABLE notifications, task_comments, task_labels, labels, "
+        "TRUNCATE TABLE task_activities, notifications, task_comments, task_labels, labels, "
         "tasks, board_columns, boards, team_members, teams, users CASCADE"
     )
     with engine.begin() as conn:

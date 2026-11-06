@@ -23,7 +23,7 @@ API 基址：`NEXT_PUBLIC_API_BASE`（默认 `http://localhost:8000`，FastAPI �
 | / | 重定向到我的任务 |
 | /login /register | 认证 |
 | /boards | 团队看板列表 |
-| /boards/[boardId] | 看板（dnd-kit 跨列/同列拖拽 + 任务详情 Drawer + 评论 @提及） |
+| /boards/[boardId] | 看板（dnd-kit 跨列/同列拖拽 + 任务详情 Drawer + 评论 @提及 + 活动流时间线） |
 | /projects | 项目总览 |
 | /me/tasks | 我的任务（逾期标红置顶） |
 | /teams/[teamId]/members | 成员与角色 |
@@ -37,8 +37,8 @@ API 基址：`NEXT_PUBLIC_API_BASE`（默认 `http://localhost:8000`，FastAPI �
 src/
 ├── app/              # 路由（pages + layouts）
 ├── components/       # 页面组件 + components/ui（shadcn）
-├── hooks/            # react-query hooks（use-board/use-tasks/use-notifications/use-admin-*...）
-├── lib/              # api.ts（fetch 封装 + token 刷新 + real/mock 双通道）、api-types.ts、mock/
+├── hooks/            # react-query hooks（use-board/use-tasks/use-notifications/use-activities/use-admin-*...）
+├── lib/              # api.ts（fetch 封装 + token 刷新 + real/mock 双通道）、api-types.ts、activity-format.ts、mock/
 └── styles/           # globals.css（@theme inline 映射 + .card-surface/.page-container）、design-tokens.css
 ```
 
@@ -62,6 +62,13 @@ src/
 - 任务编号取 UUID 去连字符前 8 位（`#xxxxxxxx`），可一键复制；**不是自增序号**，不引入序列列
 - 「复制任务」保留全部字段并给标题加「(副本)」，子任务清单会重新生成 id；复制后自动打开副本
 - 子任务清单走 `PATCH /tasks/{id}` 整体覆盖，`src/lib/task-detail.ts` 为纯逻辑（编号/进度/复制请求）
+
+## 活动流（操作日志时间线）
+
+- Drawer 底部「活动」区块展示任务变更历史：竖线时间轴 + 动作图标 + 操作人 + 相对时间；默认显示最新 5 条，超过 5 条出现「显示全部」
+- `GET /api/v1/tasks/{id}/activities` 由 `useActivities` 消费；任务更新 / 新建 / 拖拽 / 发评论 / 改标签后相关 query 自动失效重取
+- 文案拼装在纯函数 `src/lib/activity-format.ts`（字段名映射 + 长文本裁剪），单测见 `tests/activity-format.test.mjs`；后端已把值转成可读审计文本，前端不反查
+- real / mock 双通道等价：`mock/data.ts` 带历史活动种子，`mock/api.ts` 在相同写操作上埋点，纯前端演示也能看到时间线增长
 
 ## 验证
 

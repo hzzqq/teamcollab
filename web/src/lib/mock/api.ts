@@ -7,6 +7,7 @@ import type {
   AdminTeam,
   AdminUpdateUserRequest,
   AdminUser,
+  ActivityList,
   ApiEnvelope,
   AuthResponse,
   Board,
@@ -26,6 +27,8 @@ import type {
   Role,
   SearchResult,
   Task,
+  TaskActivity,
+  TaskActivityAction,
   Team,
   UpdateLabelRequest,
   UpdateTaskRequest,
@@ -53,6 +56,89 @@ function err(code: number, message: string): ApiEnvelope<never> {
 function currentUser(): User {
   const id = db.session?.userId || "u-pm";
   return db.users.find((u) => u.id === id) || db.users[0];
+}
+
+/* ---------------- 活动流埋点（与真实后端同构） ---------------- */
+
+let activitySeq = 0;
+
+type ActivityPatch = {
+  action: TaskActivityAction;
+  field?: string | null;
+  old_value?: string | null;
+  new_value?: string | null;
+};
+
+function logActivity(taskId: string, patch: ActivityPatch): void {
+  const user = currentUser();
+  const row: TaskActivity = {
+    id: `ac-${++tokenSeq}`,
+    task_id: taskId,
+    actor_id: user.id,
+    actor_name: user.display_name,
+    action: patch.action,
+    field: patch.field ?? null,
+    old_value: patch.old_value ?? null,
+    new_value: patch.new_value ?? null,
+    // 同一次操作可能连写多条，毫秒递增保证倒序稳定
+    created_at: new Date(Date.now() + ++activitySeq).toISOString(),
+  };
+  db.activities[taskId] = [row, ...(db.activities[taskId] || [])];
+}
+
+const MOCK_TRACKED_FIELDS = [
+  "title", "description", "status", "priority", "assignee_id", "column_id",
+  "start_date", "due_date", "labels", "checklist",
+] as const;
+const STATUS_TEXT: Record<string, string> = { todo: "待办", in_progress: "进行中", done: "已完成" };
+const PRIORITY_TEXT: Record<string, string> = { low: "低", medium: "中", high: "高", urgent: "紧急" };
+
+/** 把字段值转成审计文本（与后端 task_activity_service.describe 同口径） */
+function readableValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "空";
+  if (field === "status") return STATUS_TEXT[String(value)] ?? String(value);
+  if (field === "priority") return PRIORITY_TEXT[String(value)] ?? String(value);
+  if (field === "assignee_id") {
+    return db.users.find((u) => u.id === value)?.display_name ?? "已移除的账号";
+  }
+  if (field === "column_id") {
+    return Object.values(db.columns).flat().find((c) => c.id === value)?.name ?? "已删除的列";
+  }
+  const text = String(value).trim();
+  return text.length > 160 ? `${text.slice(0, 160)}…` : text || "空";
+}
+
+function checklistSummary(task: Task): string | null {
+  const items = task.checklist || [];
+  return items.length ? `${items.filter((i) => i.done).length}/${items.length} 已完成` : null;
+}
+
+function logTaskChanges(taskId: string, before: Task, after: Task): void {
+  for (const field of MOCK_TRACKED_FIELDS) {
+    let oldRaw: unknown;
+    let newRaw: unknown;
+    if (field === "labels") {
+      oldRaw = (before.labels || []).map((l) => l.name).join("、") || null;
+      newRaw = (after.labels || []).map((l) => l.name).join("、") || null;
+    } else if (field === "checklist") {
+      oldRaw = checklistSummary(before);
+      newRaw = checklistSummary(after);
+    } else {
+      oldRaw = (before as unknown as Record<string, unknown>)[field];
+      newRaw = (after as unknown as Record<string, unknown>)[field];
+    }
+    if (oldRaw === newRaw) continue;
+    logActivity(taskId, {
+      action: "field_changed",
+      field,
+      old_value: readableValue(field, oldRaw),
+      new_value: readableValue(field, newRaw),
+    });
+  }
+}
+
+function columnName(columnId: string): string {
+  return Object.values(db.columns).flat().find((c) => c.id === columnId)?.name ?? "已删除的列";
 }
 
 export const mockApi = {
@@ -335,6 +421,7 @@ export const mockApi = {
       checklist: req.checklist ?? [],
     };
     db.tasks[req.column_id] = [...(db.tasks[req.column_id] || []), task];
+    logActivity(task.id, { action: "created", new_value: task.title });
     return delay(ok(task));
   },
 
@@ -355,6 +442,7 @@ export const mockApi = {
     for (const key of Object.keys(db.tasks)) {
       db.tasks[key] = db.tasks[key].map((t) => (t.id === taskId ? updated : t));
     }
+    logTaskChanges(taskId, all[idx], updated);
     return delay(ok(updated));
   },
 
@@ -409,6 +497,7 @@ export const mockApi = {
     for (const key of Object.keys(db.tasks)) {
       db.tasks[key] = db.tasks[key].map((t) => (t.id === taskId ? { ...t, labels: assigned } : t));
     }
+    logTaskChanges(taskId, task, { ...task, labels: assigned });
     return delay(ok(assigned));
   },
 
@@ -429,11 +518,27 @@ export const mockApi = {
       }
     }
     if (!moved) return delay(err(40401, "任务不存在"));
+    const fromColumnId = moved.column_id;
     const target = db.tasks[req.target_column_id] || [];
     const pos = Math.max(0, Math.min(req.position, target.length));
     target.splice(pos, 0, { ...moved, column_id: req.target_column_id, position: pos, updated_at: new Date().toISOString() });
     db.tasks[req.target_column_id] = target;
+    // 与后端一致：只记跨列移动，同列排序不刷屏
+    if (fromColumnId !== req.target_column_id) {
+      logActivity(taskId, {
+        action: "moved",
+        field: "column",
+        old_value: columnName(fromColumnId),
+        new_value: columnName(req.target_column_id),
+      });
+    }
     return delay(ok(target[pos]));
+  },
+
+  /** 活动流时间线（最新在前，limit 截断但 total 保留全量） */
+  async activities(taskId: string, limit = 50): Promise<ApiEnvelope<ActivityList>> {
+    const rows = db.activities[taskId] || [];
+    return delay(ok({ items: rows.slice(0, limit), total: rows.length }));
   },
 
   async comments(taskId: string): Promise<ApiEnvelope<Paginated<Comment>>> {
@@ -451,6 +556,7 @@ export const mockApi = {
       created_at: new Date().toISOString(),
     };
     db.comments[taskId] = [...(db.comments[taskId] || []), comment];
+    logActivity(taskId, { action: "comment_added", new_value: req.content.slice(0, 80) });
     return delay(ok(comment));
   },
 

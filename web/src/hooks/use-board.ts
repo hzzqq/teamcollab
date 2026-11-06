@@ -93,9 +93,10 @@ export function useCreateTask(boardId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: CreateTaskRequest) => api.createTask(boardId, req),
-    onSuccess: () => {
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
       qc.invalidateQueries({ queryKey: ["me-tasks"] });
+      qc.invalidateQueries({ queryKey: ["task-activities", created.id] });
     },
   });
 }
@@ -109,6 +110,7 @@ export function useUpdateTask(boardId: string) {
       qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
       qc.invalidateQueries({ queryKey: ["task", updated.id] });
       qc.invalidateQueries({ queryKey: ["me-tasks"] });
+      qc.invalidateQueries({ queryKey: ["task-activities", updated.id] });
     },
   });
 }
@@ -156,6 +158,7 @@ export function useMoveTask(boardId: string) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: boardQueryKey(boardId) });
+      qc.invalidateQueries({ queryKey: ["task-activities"] });
     },
   });
 }

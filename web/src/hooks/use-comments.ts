@@ -25,6 +25,7 @@ export function useCreateComment(taskId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: commentsQueryKey(taskId) });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["task-activities", taskId] });
     },
   });
 }

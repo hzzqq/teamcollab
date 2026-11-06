@@ -13,7 +13,7 @@
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
 | 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest 151 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单）；前端 38 单测 + tsc + ESLint + `next build`；浏览器 E2E 五套（视觉 / 后台 / 主线 / 搜索 / 任务详情） |
+| 测试 | 后端 pytest 162 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单 + 11 活动流）；前端 45 单测 + tsc + ESLint + `next build`；浏览器 E2E 六套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流） |
 
 ## 目录
 
@@ -21,7 +21,7 @@
 docs/            # Phase 1 三文档 + Spec v1.0 + Phase 2 设计系统（契约）
 docs/v1.0-release.md  # v1.0 发布文档（功能清单 / 验收证据 / 已知限制 / 部署形态）
 web/             # Next.js 前端（10 路由，含 /admin 后台）
-server/          # FastAPI 后端（43 端点 / 10 表 / 5 个迁移，头 0005）
+server/          # FastAPI 后端（44 端点 / 11 表 / 6 个迁移，头 0006）
 docker-compose.yml  # PostgreSQL 17（pgvector 镜像）
 .pgtmp/          # 本地 PG 17.5 实例（本机无 Docker daemon 时的替代，含数据目录）
 ```
@@ -81,7 +81,9 @@ JWT_SECRET=改成强随机值 docker compose -f docker-compose.prod.yml up -d --
 - 单实例（默认）：无需 Redis，SSE 走进程内 broker；到期提醒由内置后台调度器每 5 分钟扫描（`SCHEDULER_ENABLED=false` 可关闭）。
 - 多实例：`docker compose up -d redis`，后端配置 `REDIS_URL=redis://localhost:6379/0`，SSE 经 Redis pub/sub 跨实例广播（发布失败降级为日志，通知已落库不丢），限流计数同样经 Redis 全局共享（登录暴力破解防护不随实例数稀释；Redis 故障时 fail-open 放行），到期提醒扫描由 PG advisory lock 互斥。订阅断开自动重连。
 
-## 验证状态（2026-11-05）
+## 验证状态（2026-11-05 历史快照）
+
+> 本节保留当时的验收证据；**当前基线**见顶部「技术栈」表格（后端 162 / 前端 45 / E2E 六套 / 头 0006）。
 
 - 后端：pytest **129 全绿**（auth/teams/tasks/rbac/boards/notifications/comments/scheduler/broker/rate_limit/**拖拽契约/到期时区/生产配置**/**标签+优先级**/**列删除非空保护**/**通知单条已读（含跨用户隔离 404）**）
 - 前端：tsc 0 错误、ESLint 0 警告、**单元测试 25/25**（`npm test`，node:test + 原生 TS 类型剥离，零额外依赖）

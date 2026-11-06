@@ -2,18 +2,32 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Flag, ListChecks, Plus, Trash2, X } from "lucide-react";
+import {
+  ArrowRight,
+  Circle,
+  Copy,
+  Flag,
+  History,
+  ListChecks,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useMe } from "@/hooks/use-me";
 import { useMembers } from "@/hooks/use-members";
 import { useTaskDetail, useUpdateTask, useDeleteTask, useCreateTask } from "@/hooks/use-board";
 import { useLabels, useAssignTaskLabels } from "@/hooks/use-labels";
 import { useComments, useCreateComment } from "@/hooks/use-comments";
+import { useActivities } from "@/hooks/use-activities";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { buildDuplicateRequest, checklistProgress, newChecklistItem, shortTaskId } from "@/lib/task-detail";
+import { activityIcon, formatActivity, type ActivityIcon } from "@/lib/activity-format";
 import { CommentComposer } from "@/components/kanban/comment-composer";
 import {
   Select,
@@ -60,6 +74,7 @@ export function TaskDrawer({
   const createTask = useCreateTask(boardId);
   const { data: comments, isLoading: commentsLoading } = useComments(taskId || "");
   const createComment = useCreateComment(taskId || "");
+  const { data: activityData, isLoading: activitiesLoading } = useActivities(taskId);
 
   const teamId = me?.team?.id || "";
   const { data: teamLabels } = useLabels(teamId);
@@ -67,8 +82,11 @@ export function TaskDrawer({
 
   const [title, setTitle] = useState("");
   const [newItem, setNewItem] = useState("");
+  const [showAllActivities, setShowAllActivities] = useState(false);
   const knownNames = new Set((members ?? []).map((m) => m.user.display_name));
   const progress = checklistProgress(task?.checklist);
+  const activities = activityData?.items ?? [];
+  const visibleActivities = showAllActivities ? activities : activities.slice(0, 5);
 
   useEffect(() => {
     setTitle(task?.title ?? "");
@@ -369,6 +387,47 @@ export function TaskDrawer({
                     pending={createComment.isPending}
                   />
                 </div>
+
+                {/* 活动记录（操作日志时间线） */}
+                <div className="border-t border-border px-4 py-3" aria-label="活动记录">
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-meta">
+                    <History size={14} strokeWidth={1.5} /> 活动
+                    {activityData && activityData.total > 0 ? (
+                      <span className="ml-auto font-normal">共 {activityData.total} 条</span>
+                    ) : null}
+                  </p>
+                  {activitiesLoading ? (
+                    <p className="text-xs text-meta">加载中…</p>
+                  ) : activities.length > 0 ? (
+                    <>
+                      <ol className="relative ml-1.5 space-y-3 border-l border-border pl-4">
+                        {visibleActivities.map((a) => (
+                          <li key={a.id} className="relative" data-testid="activity-row">
+                            <span className="absolute -left-6 top-0.5 flex size-4 items-center justify-center rounded-full border border-border bg-surface text-meta">
+                              <ActivityGlyph kind={activityIcon(a.action)} />
+                            </span>
+                            <p className="text-xs leading-relaxed text-fg">
+                              <span className="font-medium">{a.actor_name}</span>{" "}
+                              <span className="text-fg-2">{formatActivity(a)}</span>
+                            </p>
+                            <p className="mt-0.5 text-xs text-meta">{timeAgo(a.created_at)}</p>
+                          </li>
+                        ))}
+                      </ol>
+                      {activities.length > 5 && !showAllActivities ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllActivities(true)}
+                          className="mt-3 text-xs text-primary-600 hover:underline"
+                        >
+                          显示全部 {activities.length} 条
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-xs text-meta">暂无活动记录，改动任务后会在这里留痕。</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -398,4 +457,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function ActivityGlyph({ kind }: { kind: ActivityIcon }) {
+  const props = { size: 10, strokeWidth: 1.75 } as const;
+  if (kind === "plus") return <Plus {...props} />;
+  if (kind === "edit") return <Pencil {...props} />;
+  if (kind === "move") return <ArrowRight {...props} />;
+  if (kind === "message") return <MessageSquare {...props} />;
+  return <Circle {...props} />;
 }

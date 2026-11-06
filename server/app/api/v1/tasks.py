@@ -1,4 +1,4 @@
-"""任务路由：CRUD、列表/搜索、我的任务、拖拽落位。"""
+"""任务路由：CRUD、列表/搜索、我的任务、拖拽落位、操作日志时间线。"""
 
 import uuid
 
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_board_roles, require_task_roles
 from app.core.db import get_db
 from app.schemas.common import OkResponse
+from app.schemas.task_activity import TaskActivityListResponse
 from app.schemas.task import (
     PaginatedTasks,
     TaskCreateRequest,
@@ -15,6 +16,7 @@ from app.schemas.task import (
     TaskResponse,
     TaskUpdateRequest,
 )
+from app.services.task_activity_service import task_activity_service
 from app.services.task_service import task_service
 
 router = APIRouter(tags=["tasks"])
@@ -81,6 +83,18 @@ def get_task(
 ):
     task = task_service.get(db, task_id, ctx.team_id)
     return {"code": 0, "data": task, "message": ""}
+
+
+@router.get("/tasks/{task_id}/activities", response_model=TaskActivityListResponse)
+def list_task_activities(
+    task_id: uuid.UUID,
+    ctx=Depends(require_task_roles(*ROLE_VIEWER_PLUS)),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    """任务操作日志时间线（viewer+ 可读，租户由 require_task_roles 保证）。"""
+    rows, total = task_activity_service.list_activities(db, task_id, ctx.team_id, limit)
+    return {"code": 0, "data": {"items": rows, "total": total}, "message": ""}
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse)

@@ -13,6 +13,7 @@ from app.repositories.task_repo import task_repo
 from app.repositories.team_repo import team_repo
 from app.schemas.task import TaskCreateRequest, TaskUpdateRequest
 from app.services.due_soon_service import due_soon_service
+from app.services.task_activity_service import task_activity_service
 from app.services.notification_service import notification_service
 
 
@@ -45,6 +46,9 @@ class TaskService:
             ),
         )
         db.flush()
+        task_activity_service.record_created(
+            db, task_id=task.id, team_id=team_id, actor=actor, title=task.title
+        )
         if data.label_ids:
             self._ensure_labels_belong_to_team(db, team_id, data.label_ids)
             label_repo.replace_task_labels(db, task.id, data.label_ids)
@@ -135,6 +139,7 @@ class TaskService:
     ) -> Task:
         task = self.get(db, task_id, team_id)
         fields = data.model_fields_set
+        before = self._activity_snapshot(task)
         old_assignee = task.assignee_id
         old_status = task.status
 
@@ -168,6 +173,16 @@ class TaskService:
         if "label_ids" in fields and data.label_ids is not None:
             # 同上：刷新 labels 集合，避免 identity map 复用陈旧空集合
             db.refresh(task, ["labels"])
+
+        # 日志与任务更新同事务提交：刷新过 labels 后再取 after 快照，值才准确
+        task_activity_service.record_update(
+            db,
+            task_id=task.id,
+            team_id=team_id,
+            actor=actor,
+            before=before,
+            after=self._activity_snapshot(task),
+        )
 
         notifications: list = []
         assignee_changed = "assignee_id" in fields and task.assignee_id != old_assignee
@@ -233,6 +248,7 @@ class TaskService:
             raise not_found("目标列不存在")
 
         from_column_id = task.column_id
+        from_column = board_repo.get_column_by_id(db, from_column_id)
         # 批量重排：源列/目标列任务全部重写 position（MVP 规模小，最简正确）
         # 目标列：排除被拖任务自身后按 position 插入（与前端乐观更新同口径）
         tasks_in_target = [t for t in task_repo.list_by_column(db, column_id) if t.id != task.id]
@@ -252,6 +268,17 @@ class TaskService:
         for idx, t in enumerate(tasks_in_target):
             t.position = idx
         db.flush()
+
+        # 只记跨列移动：同列内排序每次拖拽都会触发，记日志会把时间线刷屏
+        if from_column_id != column_id:
+            task_activity_service.record_moved(
+                db,
+                task_id=task.id,
+                team_id=team_id,
+                actor=actor,
+                from_column=from_column.name if from_column else "已删除的列",
+                to_column=target_column.name,
+            )
 
         notifications: list = []
         if task.assignee_id and task.assignee_id != actor.id:
@@ -288,6 +315,28 @@ class TaskService:
         return task
 
     # ---- 内部工具 ----
+    @staticmethod
+    def _activity_snapshot(task: Task) -> dict:
+        """活动流 diff 的可比较快照：集合型字段压成摘要字符串，避免无意义刷屏。"""
+        checklist = task.checklist or []
+        labels = list(task.labels or [])
+        return {
+            "title": task.title,
+            "description": task.description,
+            "status": task.status,
+            "priority": task.priority,
+            "assignee_id": task.assignee_id,
+            "column_id": task.column_id,
+            "start_date": task.start_date,
+            "due_date": task.due_date,
+            "labels": "、".join(lbl.name for lbl in labels) or None,
+            "checklist": (
+                f"{sum(1 for item in checklist if item.get('done'))}/{len(checklist)} 已完成"
+                if checklist
+                else None
+            ),
+        }
+
     @staticmethod
     def _ensure_owned_board(db: Session, board_id: uuid.UUID, team_id: uuid.UUID) -> None:
         board = board_repo.get_by_id(db, board_id)

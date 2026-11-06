@@ -27,6 +27,7 @@ export function useAssignTaskLabels(boardId: string) {
       qc.invalidateQueries({ queryKey: ["board", boardId] });
       qc.invalidateQueries({ queryKey: ["task", vars.taskId] });
       qc.invalidateQueries({ queryKey: ["me-tasks"] });
+      qc.invalidateQueries({ queryKey: ["task-activities", vars.taskId] });
     },
   });
 }

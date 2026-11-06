@@ -331,3 +331,26 @@ export interface SearchResult {
   tasks: SearchTaskHit[];
   boards: SearchBoardHit[];
 }
+
+/* ---------------- 任务活动流（GET /tasks/{id}/activities） ---------------- */
+
+export type TaskActivityAction = "created" | "field_changed" | "moved" | "comment_added";
+
+export interface TaskActivity {
+  id: string;
+  task_id: string;
+  actor_id: string | null;
+  /** 写入时的名字快照，账号变更/删除后历史仍可读 */
+  actor_name: string;
+  action: TaskActivityAction;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+}
+
+export interface ActivityList {
+  /** 后端按 created_at 倒序返回 */
+  items: TaskActivity[];
+  total: number;
+}

@@ -11,6 +11,7 @@ import type {
   Member,
   NotificationItem,
   Task,
+  TaskActivity,
   Team,
   User,
 } from "@/lib/api-types";
@@ -23,6 +24,7 @@ export interface MockDb {
   columns: Record<string, BoardColumn[]>; // boardId -> columns
   tasks: Record<string, Task[]>; // columnId -> tasks
   comments: Record<string, Comment[]>; // taskId -> comments
+  activities: Record<string, TaskActivity[]>; // taskId -> 活动日志（最新在前）
   labels: Record<string, Label[]>; // teamId -> labels（团队级）
   notifications: NotificationItem[];
   session: { access: string; refresh: string; userId: string } | null;
@@ -35,6 +37,10 @@ function dayOffset(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
+}
+
+function minutesAgo(n: number): string {
+  return new Date(Date.now() - n * 60_000).toISOString();
 }
 
 /* 真实感种子数据（避免 John Doe 类占位名） */
@@ -130,6 +136,39 @@ export function seedDb(): MockDb {
     ],
   };
 
+  // 活动流种子：与真实后端同构（审计文本已可读），数组最新在前
+  const activities: Record<string, TaskActivity[]> = {
+    "tk-1": [
+      {
+        id: "ac-3", task_id: "tk-1", actor_id: "u-dev", actor_name: "林晚晴",
+        action: "comment_added", field: null, old_value: null,
+        new_value: "需求池已同步，今天下午对齐优先级", created_at: minutesAgo(35),
+      },
+      {
+        id: "ac-2", task_id: "tk-1", actor_id: "u-pm", actor_name: "沈知远",
+        action: "field_changed", field: "priority", old_value: "中", new_value: "紧急",
+        created_at: minutesAgo(180),
+      },
+      {
+        id: "ac-1", task_id: "tk-1", actor_id: "u-pm", actor_name: "沈知远",
+        action: "created", field: null, old_value: null,
+        new_value: "梳理 Q3 版本需求并输出评审文档", created_at: minutesAgo(1440),
+      },
+    ],
+    "tk-5": [
+      {
+        id: "ac-5", task_id: "tk-5", actor_id: "u-dev", actor_name: "林晚晴",
+        action: "moved", field: "column", old_value: "待办", new_value: "进行中",
+        created_at: minutesAgo(90),
+      },
+      {
+        id: "ac-4", task_id: "tk-5", actor_id: "u-pm", actor_name: "沈知远",
+        action: "created", field: null, old_value: null,
+        new_value: "通知中心 SSE 联调", created_at: minutesAgo(2880),
+      },
+    ],
+  };
+
   const notifications: NotificationItem[] = [
     {
       id: "n-1",
@@ -173,6 +212,7 @@ export function seedDb(): MockDb {
     columns: { "b-1": cols },
     tasks,
     comments,
+    activities,
     labels,
     notifications,
     session: null,

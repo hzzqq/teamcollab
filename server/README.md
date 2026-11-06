@@ -11,7 +11,7 @@ server/
 ├── app/
 │   ├── main.py              # 入口：只装配（中间件 + 路由 + 异常处理器 + 调度器生命周期）
 │   ├── core/                # config / db / security / errors / rate_limit / scheduler
-│   ├── models/              # SQLAlchemy 模型（10 表）
+│   ├── models/              # SQLAlchemy 模型（11 表）
 │   ├── schemas/             # Pydantic 请求/响应模型（含 admin.py）
 │   ├── repositories/        # 数据访问（租户过滤强制注入）
 │   ├── services/            # 业务逻辑（事务编排，含 user_service / due_soon_service）
@@ -20,7 +20,7 @@ server/
 │       ├── deps.py          # 认证 / RBAC（实时查角色）/ 租户上下文 / require_superuser
 │       ├── errors.py        # 全局异常处理器
 │       └── v1/              # 路由（auth/me/teams/boards/tasks/comments/labels/notifications/admin/search）
-├── alembic/                 # 迁移 0001~0005（头 0005_add_task_checklist.py）
+├── alembic/                 # 迁移 0001~0006（头 0006_add_task_activities.py）
 ├── tests/                   # pytest + httpx TestClient（含 test_admin.py）
 ├── scripts/seed.py          # 开发种子数据
 ├── scripts/multi_instance_verify.py  # 双进程多实例验证（SSE/限流/调度器）
@@ -63,9 +63,10 @@ python -m venv .venv
 
 ## 核心契约
 
-- **运行时 43 端点**（`v1/` 下 11 个路由模块）；`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，完整契约以运行时 `/docs` 为准
+- **运行时 44 端点**（`v1/` 下 11 个路由模块）；`docs/phase2/openapi-v2.yaml` 是 phase2 的 **27 方法历史快照**，完整契约以运行时 `/docs` 为准
 - 全局搜索：`GET /api/v1/search?q=&limit=`，按 `team_members` 实时取 team_ids、经 `boards.team_id` 隔离（tasks 表无 team_id）；LIKE 通配符 `%` `_` 转义为字面量，结果含团队/看板/列面包屑供命令面板深链使用
 - 子任务清单：`tasks.checklist` 为数组型 JSONB（`[{id,text,done}]`，迁移 0005，默认 `[]`），随任务 create/PATCH 整体读写；服务端校验最多 50 项、text 非空、id 不重复。`start_date` 早于 `due_date` 由 Pydantic 与 DB check 双重保证
+- 活动流：`task_activities`（迁移 0006）记 `created / field_changed / moved / comment_added` 四类事件；`GET /tasks/{id}/activities?limit=` viewer+ 可读、按 `created_at` 倒序，租户经 `require_task_roles` 校验。日志与业务写在**同一事务**提交；值落人类可读审计文本（状态中文 / 人名 / 列名），`actor_name` 为名字快照。埋点覆盖 task create / PATCH 字段 diff / 跨列移动 / 评论 / `PUT /tasks/{id}/labels`；幂等 PATCH 与同列排序不产生日志。任务删除经 FK 级联清理
 - 统一响应：`{ "code": 0, "data": {}, "message": "" }`
 - 错误码：40001 / 40101 / 40301 / 40401 / 40901 / 42901 / 50000
 - 认证：`Authorization: Bearer <access_token>`（SSE 走 `?token=`）

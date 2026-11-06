@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import bad_request, not_found
 from app.models.label import Label
+from app.models.user import User
 from app.repositories.label_repo import label_repo
 from app.repositories.task_repo import task_repo
 from app.schemas.label import LabelCreateRequest, LabelUpdateRequest, TaskLabelsRequest
+from app.services.task_activity_service import task_activity_service
 
 
 class LabelService:
@@ -43,8 +45,18 @@ class LabelService:
         db.commit()
         return label
 
+    @staticmethod
+    def _label_summary(task) -> str | None:
+        names = [lbl.name for lbl in (task.labels or [])]
+        return "、".join(sorted(names)) or None
+
     def set_task_labels(
-        self, db: Session, team_id: uuid.UUID, task_id: uuid.UUID, req: TaskLabelsRequest
+        self,
+        db: Session,
+        team_id: uuid.UUID,
+        task_id: uuid.UUID,
+        req: TaskLabelsRequest,
+        actor: User,
     ) -> Label:
         """整体覆盖任务标签；校验任务与标签均属同一团队。返回带 labels 的任务。"""
         task = task_repo.get_by_id(db, task_id)
@@ -55,11 +67,24 @@ class LabelService:
             unknown = [lid for lid in req.label_ids if lid not in owned]
             if unknown:
                 raise bad_request("存在不属于本团队的标签")
+
+        before = self._label_summary(task)
         label_repo.replace_task_labels(db, task_id, req.label_ids)
-        db.commit()
+        db.flush()
         # 同一会话内 identity map 会复用原对象，且其 labels 集合已在加载时置空；
         # 必须显式 refresh 该集合以反映新建的关联。
         db.refresh(task, ["labels"])
+        after = self._label_summary(task)
+        if before != after:
+            task_activity_service.record_update(
+                db,
+                task_id=task.id,
+                team_id=team_id,
+                actor=actor,
+                before={"labels": before},
+                after={"labels": after},
+            )
+        db.commit()
         return task
 
     def _get_owned(

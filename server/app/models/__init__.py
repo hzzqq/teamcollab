@@ -6,6 +6,7 @@ from app.models.board_column import BoardColumn
 from app.models.label import Label, task_labels
 from app.models.notification import Notification
 from app.models.task import Task
+from app.models.task_activity import TaskActivity
 from app.models.task_comment import TaskComment
 from app.models.team import Team
 from app.models.team_member import TeamMember
@@ -19,6 +20,7 @@ __all__ = [
     "Board",
     "BoardColumn",
     "Task",
+    "TaskActivity",
     "TaskComment",
     "Notification",
     "Label",

@@ -62,6 +62,7 @@ src/
 - 任务编号取 UUID 去连字符前 8 位（`#xxxxxxxx`），可一键复制；**不是自增序号**，不引入序列列
 - 「复制任务」保留全部字段并给标题加「(副本)」，子任务清单会重新生成 id；复制后自动打开副本
 - 子任务清单走 `PATCH /tasks/{id}` 整体覆盖，`src/lib/task-detail.ts` 为纯逻辑（编号/进度/复制请求）
+- 多层级子任务（4C 新增）：任务可建子任务（`POST /tasks/{id}/subtasks`，继承父 board/列），`parent_id` 自引用，删父时子变顶层；Drawer「子任务（层级）」区块展示子任务并可勾选完成 / 进入 / 删除，看板列表视图「子任务」列显示 `subtask_count` 圆点数字
 
 ## 活动流（操作日志时间线）
 
@@ -73,6 +74,7 @@ src/
 ## 列表 / 表格视图与批量操作
 
 - 看板头部提供「看板视图 / 列表视图」切换，`?view=list` 写进 URL；`label` / `priority` / `assignee` 筛选参数与视图参数共存，切换视图时增量改参不丢条件
+- 看板头部「视图」选择器（`ViewSwitcher`）下拉已保存视图，应用即写回 URL 的 `view/filter/sort`；member+ 可「另存为当前筛选」，列表视图额外捕获排序键；筛选↔视图经 `src/lib/board-filter.ts` 的 `toViewFilter` / `fromViewFilter` 互转（往返一致，单测见 `tests/view-filter.test.mjs`）
 - 表格复用 `useBoard()` 的 `columns` 做 flatten，纯函数 `src/lib/task-table.ts` 负责筛选 + 排序（状态/优先级按业务顺序而非字典序，无截止日期排末尾）；单测见 `tests/task-table.test.mjs`
 - 勾选行后出现批量工具条：改状态 / 改优先级 / 改负责人 / 删除（二次确认）；批量请求走 `POST /tasks/batch`，成功后失效看板、我的任务、活动流与各任务详情缓存
 - `viewer` 只读角色下复选框禁用、工具条不出现，与后端角色守卫一致

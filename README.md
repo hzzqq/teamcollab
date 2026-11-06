@@ -13,16 +13,16 @@
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
 | 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest 173 全绿（129 基线 + 9 管理员 + 8 全局搜索 + 5 任务清单 + 11 活动流 + 11 任务操作） + ruff 全绿 + OpenAPI 契约漂移门禁；前端 52 单测 + tsc + ESLint + `next build`；浏览器 E2E 七套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流 / 列表视图） |
+| 测试 | 后端 pytest **189 全绿**（173 基线 + 6 保存视图 + 10 子任务） + ruff 全绿 + OpenAPI 契约漂移门禁（**36 路径 / 52 方法**）；前端 **56 单测** + tsc + ESLint + `next build`；浏览器 E2E 七套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流 / 列表视图） |
 
 ## 目录
 
 ```
 docs/            # Phase 1 三文档 + Spec v1.0 + Phase 2 设计系统（契约）
 docs/v1.0-release.md  # v1.0 发布文档（功能清单 / 验收证据 / 已知限制 / 部署形态）
-docs/openapi-runtime.json # 运行时 OpenAPI 契约（自动生成，33 路径 / 46 方法，CI 漂移门禁）
+docs/openapi-runtime.json # 运行时 OpenAPI 契约（自动生成，36 路径 / 52 方法，CI 漂移门禁）
 web/             # Next.js 前端（11 路由，含 /admin 后台）
-server/          # FastAPI 后端（46 端点 / 11 表 / 6 个迁移，头 0006）
+server/          # FastAPI 后端（52 端点 / 12 表 / 7 个迁移，头 0007）
 docker-compose.yml  # PostgreSQL 17（pgvector 镜像）
 .pgtmp/          # 本地 PG 17.5 实例（本机无 Docker daemon 时的替代，含数据目录）
 ```
@@ -201,6 +201,21 @@ cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
 | 纯逻辑单测 | `web/tests/task-table.test.mjs`（7 例）覆盖 flatten / 排序 / 无截止日期排后 / 筛选+排序组合 / `buildBatchRequest` / `nextSort` | `lib/task-table.ts` |
 
 > 关键坑：Node 原生 TS 剥离（`node --experimental-strip-types --test`）不走 bundler，`task-table.ts` 的值导入必须写 `./board-filter.ts` 显式扩展名，且 `tsconfig.json` 需 `allowImportingTsExtensions`；否则 `npm test` 直接 `ERR_MODULE_NOT_FOUND`。另：`TaskTable` 排序表头必须是「返回 JSX 的普通函数」，写成内联组件会让 React 每次渲染重挂表头、点击排序时元素 detach。
+
+## 保存视图 + 任务多层级子任务（2026-11-06 批次 4C）
+
+看板协作本分内的两个效率与结构功能，前端 real / mock 双通道等价，后端全部走同一租户与角色守卫。
+
+| 项 | 约定 | 落地位置 |
+|----|------|----------|
+| 保存视图 | `GET/POST/PUT/DELETE /boards/{boardId}/views`：视图存 `filters`（JSONB：label/priority/assignee/sort 等）+ `view`（board/list）+ 排序键；**创建者或团队管理员可改删，其余 403**（用 `forbidden` 而非 `bad_request`）；列表视图额外序列化 `sort_key/sort_dir` | `saved_view_service` + `views.py` |
+| 视图选择器 | 看板头部 `ViewSwitcher` 下拉已存视图，应用即写回 URL 的 `view/filter/sort`；member+ 可「另存为」，列表视图捕获当前排序 | `view-switcher.tsx` + `board-view.tsx` |
+| 任务多层级 | `tasks.parent_id` 自引用（`ondelete=SET NULL`，删父时子变顶层）；`list_by_columns` 只返顶层任务，子任务经 `GET /tasks/{taskId}/subtasks` 取；环检测沿祖先链上行；`Task.children`/`parent` 关系 `lazy="raise"` | `task_repo` + `task_service` |
+| 子任务读写 | `POST /tasks/{taskId}/subtasks` 继承父的 board/column；`TaskOut` 新增 `subtask_count`（看板详情批量统计挂载，非映射属性）；`create_subtask` 返回前重载 task 修复 `lazy="raise"` 序列化 bug | `task_service.create_subtask` + `board_service.get_detail` |
+| 双通道 + 类型 | `api.ts`/`mock/api.ts` 同构补 `createSubtask/listSubtasks/listViews/createView/updateView/deleteView`；`api-types.ts` 补 `parent_id/subtask_count/SubtaskCreateRequest/ViewFilter/SavedView` 等；新增 `use-saved-views`/`use-subtasks` hooks | `web/src/{lib,hooks}` |
+| 筛选↔视图互转 | `board-filter.ts` 新增 `toViewFilter(f)`/`fromViewFilter(v)`，往返一致（单测覆盖） | `lib/board-filter.ts` + `tests/view-filter.test.mjs`（4 例） |
+
+> 关键坑：`ViewFilter` 的 Pydantic `exclude_none` 被 FastAPI `jsonable_encoder` 忽略（null 仍被回写），最终 `SavedViewOut.filters` 改用 `dict[str, Any]` 原样回显存储值；`create_subtask` 曾因 `lazy="raise"` 关联未重载导致响应序列化 `ResponseValidationError`，已在返回前 `get_by_id` 重载根治并加测试守护。
 
 ## 已修复的关键缺陷（2026-11-05 评审批次）
 

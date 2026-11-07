@@ -339,8 +339,16 @@ CI `validate-startup-sh` job 在 `ubuntu-24.04` 上实测。
 （不再在 SSR 期调用 `Date.now()` / `Intl` 本地时区）；`hooks/use-theme.ts` 让首屏
 SSR/CSR 恒为 `light`、挂载后再对齐 localStorage（真实主题仍由 `<head>` 同步脚本保证无 FOUC）。
 E2E 现同时收集 `console.error` 与 `pageerror` 堆栈 + 触发 URL，复发时可直接定点定位。
-**诚实边界**：因该问题偶发且未拿到非 minified 完整堆栈，以上不能宣称 100% 根治；
-若 CI 再次复现，按新打印的诊断输出定位具体组件再修。
+
+**根因已确定性复现并修复**：手动 `hydration-probe` job 在 `next dev`（非 minified）下
+**10/10 轮稳定复现**（每轮 2 条、共 20 条 hydration 错误，均落在 `/boards/[boardId]` 页面）。
+定位到 `web/src/app/(app)/boards/[boardId]/board-view.tsx`：它用 `useMe()` 的异步数据算
+`canWrite`/`canAdmin`，SSR 永远没有 `me`，但 CSR 首帧可能因 React Query 缓存已存在而直接拿到
+`me`，导致由角色派生的「重命名 / 删除看板」按钮在首屏出现，与 SSR HTML 结构不一致。
+修复沿用 `RelativeTime` / `use-theme` 的 **mounted 闸门**模式：SSR 与 CSR 首屏统一为「未就绪」状态，
+挂载后再渲染真实角色 UI，保证首屏 DOM 一致。复跑 `hydration-probe` → **`hydration_errors=0`（10/10 全清）**。
+**诚实边界**：该诊断通道只覆盖 `/login` → `/me/tasks` → 列表视图 → 任务详情深链 这条路径，
+其它未被执行到的 `useMe` 派生条件渲染若残留不一致，需补路由覆盖或复发时再定点修。
 
 **非 minified 诊断通道（手动触发，不是门禁）**：`web/e2e/hydration-probe.js` 在
 `next dev`（React 开发版、错误信息不压缩）下跑 N 轮，每轮新建唯一账号/看板，

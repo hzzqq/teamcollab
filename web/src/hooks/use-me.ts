@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { resolveActiveTeam, useMyTeams } from "@/hooks/use-teams";
@@ -23,6 +23,13 @@ export interface MeData {
  */
 export function useMe() {
   const qc = useQueryClient();
+  // 首屏确定性闸门：useMe 是异步数据，SSR 永远没有 me；但同一会话内前序页面若已拉过
+  // /me，React Query 缓存会在 CSR 首帧同步返回 me，导致由角色 / 团队派生的 UI（侧栏
+  // 管理员入口、重命名 / 删除看板按钮、成员页邀请表单、团队设置管理区、用户菜单姓名等）
+  // 在首屏与 SSR HTML 结构不一致，触发 React #418（hydration mismatch）。
+  // 用 mounted 闸门让 SSR 与 CSR 首帧都拿不到 me，挂载后再渲染真实身份 UI，保证首屏一致。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const meQuery = useQuery({
     queryKey: ["me"],
     queryFn: async (): Promise<{ user: User }> => {
@@ -53,10 +60,12 @@ export function useMe() {
 
   return {
     ...meQuery,
-    data: meQuery.data && team ? { user: meQuery.data.user, team, role: active!.role } : undefined,
+    // mounted 闸门：SSR 与 CSR 首帧统一为 undefined，挂载后才有真实身份
+    data: mounted && meQuery.data && team ? { user: meQuery.data.user, team, role: active!.role } : undefined,
     // 平台级超级管理员标记直接取自 /me 的 user，刻意不依赖 team：
     // 无团队用户（如后台新建账号）data 会是 undefined，但不该因此丢失管理员身份判定。
-    isSuperuser: Boolean(meQuery.data?.user?.is_superuser),
+    // 同样受 mounted 闸门约束，避免首帧多出一个后台入口造成 hydration 不一致。
+    isSuperuser: mounted ? Boolean(meQuery.data?.user?.is_superuser) : false,
     isLoading: meQuery.isLoading || teamsQuery.isLoading,
     isError: meQuery.isError || teamsQuery.isError,
     refetch: async () => {

@@ -75,7 +75,7 @@ async function makeFixture(round) {
     title: `probe 任务 ${ts}`,
     column_id: col.id,
   });
-  return { email, password, boardId: board.id, taskId: task.id };
+  return { email, password, boardId: board.id, taskId: task.id, teamId: me.team.id };
 }
 
 (async () => {
@@ -126,6 +126,17 @@ async function makeFixture(round) {
         await page.goto(`${BASE}/boards/${fixture.boardId}?view=list`, NAV);
         await page.waitForTimeout(900);
         await page.goto(`${BASE}/boards/${fixture.boardId}?task=${fixture.taskId}`, NAV);
+        await page.waitForTimeout(900);
+        // 扩覆盖：其它 (app) 路由（同一 context，/me 已热缓存，复现缓存命中首帧场景）
+        await page.goto(`${BASE}/boards`, NAV);
+        await page.waitForTimeout(900);
+        await page.goto(`${BASE}/projects`, NAV);
+        await page.waitForTimeout(900);
+        await page.goto(`${BASE}/teams/${fixture.teamId}/members`, NAV);
+        await page.waitForTimeout(900);
+        await page.goto(`${BASE}/teams/${fixture.teamId}/settings`, NAV);
+        await page.waitForTimeout(900);
+        await page.goto(`${BASE}/admin`, NAV);
         await page.waitForTimeout(900);
       } catch (e) {
         record("probe-navigation", `导航失败: ${e.message}`, "");

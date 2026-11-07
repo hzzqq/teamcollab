@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useNotifications, useMarkAllRead, useMarkOneRead } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
-import { timeAgo } from "@/lib/format";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -139,7 +139,7 @@ export function NotificationBell() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm text-fg">{notificationText(n)}</span>
-                      <span className="block text-xs text-meta">{timeAgo(n.created_at)}</span>
+                      <RelativeTime iso={n.created_at} className="block text-xs text-meta" />
                     </span>
                     {!n.is_read ? <span className="mt-2 size-2 shrink-0 rounded-full bg-danger" /> : null}
                   </button>

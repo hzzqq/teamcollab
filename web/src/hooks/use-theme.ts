@@ -43,10 +43,15 @@ function applyTheme(theme: Theme): void {
 
 /** 主题切换：html 上切换 data-theme="dark"，存 localStorage（DESIGN.md §9.2） */
 export function useTheme() {
-  ensureInitialized();
-  const [theme, setThemeState] = useState<Theme>(currentTheme);
+  // 首屏（SSR + CSR hydration）恒为 "light"：ThemeToggle 的 aria-label / 图标 /
+  // Tooltip 文案都跟着 theme 走，若在渲染期读 localStorage 就会让两端 DOM 不一致，
+  // 触发 React #418（hydration mismatch，CI 浏览器 E2E 偶发捕获）。
+  // 真实主题由 <head> 的同步脚本在 hydration 之前写到 <html data-theme>（无 FOUC），
+  // React state 只负责图标，挂载后再对齐即可。
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
+    ensureInitialized(); // 挂载后才读 localStorage / 写 data-theme
     const listener = (next: Theme) => setThemeState(next);
     listeners.add(listener);
     // 挂载时同步一次当前值（期间可能已被其他实例改过）

@@ -99,7 +99,23 @@ async function login(page) {
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
+    const errorDetails = [];
+    const isHydrationError = (text) =>
+      /React error #4\d\d|Hydration failed|Text content does not match|server rendered HTML/i.test(text);
+    page.on("pageerror", (e) => {
+      errors.push(e.message);
+      errorDetails.push(
+        `[pageerror] ${e.message}\n${(e.stack || "").split("\n").slice(0, 6).join("\n")}`,
+      );
+    });
+    page.on("console", (m) => {
+      if (m.type() !== "error") return;
+      const text = m.text();
+      // 全量留痕（含触发 URL），但只有 hydration / React 运行时错误计入断言：
+      // favicon 404 之类的噪音不该让断言变严、制造新的偶发失败。
+      errorDetails.push(`[console.error] ${text} @ ${page.url()}`);
+      if (isHydrationError(text)) errors.push(text);
+    });
     await login(page);
 
     /* ---------- A. 列表视图 subtask_count 列（4C 新增） ---------- */
@@ -151,6 +167,11 @@ async function login(page) {
     check("delete_removes_grandchild", !text.includes(NEW_GRAND));
 
     check("no_page_runtime_errors", errors.length === 0, errors.slice(0, 2).join(" | "));
+    if (errors.length) {
+      // CI 上偶发 React #418 时，把完整堆栈 + URL 打出来，下次能直接定点定位
+      console.log("\n--- 运行时错误诊断（定位偶发 hydration mismatch）---");
+      errorDetails.slice(0, 8).forEach((d) => console.log(d));
+    }
     await page.screenshot({ path: path.join(SHOT_DIR, "subtasks.png"), animations: "disabled" });
     await page.close();
   } finally {

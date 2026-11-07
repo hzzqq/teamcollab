@@ -49,7 +49,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { HighlightMentions } from "@/components/common/highlight-mentions";
-import { timeAgo } from "@/lib/format";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { cn, initials } from "@/lib/utils";
 import type { ChecklistItem, Priority, TaskStatus } from "@/lib/api-types";
 
@@ -505,7 +505,7 @@ export function TaskDrawer({
                           <div className="min-w-0 flex-1">
                             <p className="text-xs text-fg">
                               <span className="font-medium">{c.author.display_name}</span>{" "}
-                              <span className="text-meta">{timeAgo(c.created_at)}</span>
+                              <RelativeTime iso={c.created_at} className="text-meta" />
                             </p>
                             <p className="whitespace-pre-wrap break-words text-sm text-fg-2">
                               <HighlightMentions content={c.content} knownNames={knownNames} />
@@ -548,7 +548,7 @@ export function TaskDrawer({
                               <span className="font-medium">{a.actor_name}</span>{" "}
                               <span className="text-fg-2">{formatActivity(a)}</span>
                             </p>
-                            <p className="mt-0.5 text-xs text-meta">{timeAgo(a.created_at)}</p>
+                            <p className="mt-0.5 text-xs text-meta"><RelativeTime iso={a.created_at} /></p>
                           </li>
                         ))}
                       </ol>

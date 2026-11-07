@@ -184,4 +184,18 @@ grep -q '前端: http://localhost:18811' "$WORK/webport.out" || {
   cat "$WORK/webport.out"; fail "WEB_PORT 未被统一读取为前端默认端口"; }
 ok "WEB_PORT=18811 被统一读取为前端默认端口"
 
+# ------------------------------------------------- 附加：Linux 版端口排查脚本
+say "附加验证: Linux 版端口排查脚本 (scripts/port-resolver.sh)"
+PTH="$ROOT/scripts/port-resolver.sh"
+bash -n "$PTH" || fail "port-resolver.sh 语法校验失败"
+if LC_ALL=C grep -q $'\r' "$PTH"; then fail "port-resolver.sh 含 CRLF"; fi
+probe_out="$(bash "$PTH" --probe 2>&1)" || { echo "$probe_out"; fail "--probe 非 0 退出"; }
+grep -q '常用演示端口占用排查' <<<"$probe_out" || { echo "$probe_out"; fail "--probe 输出异常"; }
+grep -q 'TeamCollab\|空闲' <<<"$probe_out" || fail "--probe 未列出端口状态"
+free_port="$(bash "$PTH" --find-free 18000 2>&1)" || fail "--find-free 非 0 退出"
+[[ "$free_port" =~ ^[0-9]+$ ]] || fail "--find-free 未返回数字: $free_port"
+port_out="$(bash "$PTH" --port 18000 --what-if 2>&1)" || fail "--port 非 0 退出"
+grep -q 'what-if' <<<"$port_out" || fail "--what-if 提示缺失"
+ok "bash -n / --probe / --find-free=$free_port / --port --what-if 全通过"
+
 say "PASS: scripts/start-teamcollab.sh 在 $(uname -s)/$(uname -m) 上全链路验证通过"

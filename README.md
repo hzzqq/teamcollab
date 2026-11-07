@@ -310,3 +310,26 @@ powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Port 8000 
 只读列出常用演示端口的占用归属（含 HTTP 标题识别应用），`-Free` 仅在进程路径命中
 `-Project` 或显式 `-Force` 时才释放，`-WhatIf` 只预报。仓库外旧路径
 `E:\project\port-resolver.ps1` 已改为薄转发器，旧命令仍可用。
+
+Linux / WSL 用 `scripts/port-resolver.sh`（零外部依赖：`/proc/net/tcp` + `/proc/*/fd` + bash `/dev/tcp`）：
+
+```bash
+./scripts/port-resolver.sh --probe
+./scripts/port-resolver.sh --port 8000
+./scripts/port-resolver.sh --find-free 8000
+```
+
+**Linux 版刻意只读**，不提供杀进程能力 —— 释放端口请用
+`scripts/start-teamcollab.sh --stop`（按端口精确匹配，不会误伤其它端口实例）。
+三个用法（`bash -n` / `--probe` / `--find-free` / `--port --what-if`）已纳入
+CI `validate-startup-sh` job 在 `ubuntu-24.04` 上实测。
+
+**关于偶发的 React #418（hydration mismatch）**：CI 的 `subtasks-e2e` 曾偶发在
+`no_page_runtime_errors` 里捕获 `Minified React error #418`（首跑红、失败 job 重跑绿，
+本机连续 5 次 16/16 未复现）。已从结构上消除 React 418 文档列出的几类已知成因：
+`components/ui/relative-time.tsx` 让相对时间首屏渲染**稳定占位**、hydration 后再切换并定时刷新
+（不再在 SSR 期调用 `Date.now()` / `Intl` 本地时区）；`hooks/use-theme.ts` 让首屏
+SSR/CSR 恒为 `light`、挂载后再对齐 localStorage（真实主题仍由 `<head>` 同步脚本保证无 FOUC）。
+E2E 现同时收集 `console.error` 与 `pageerror` 堆栈 + 触发 URL，复发时可直接定点定位。
+**诚实边界**：因该问题偶发且未拿到非 minified 完整堆栈，以上不能宣称 100% 根治；
+若 CI 再次复现，按新打印的诊断输出定位具体组件再修。

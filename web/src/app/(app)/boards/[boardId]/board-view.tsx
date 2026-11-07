@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, LayoutGrid, List, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -25,9 +25,18 @@ export default function BoardView({ boardId }: { boardId: string }) {
   const taskId = searchParams.get("task");
   const { data: me } = useMe();
   const { data: board } = useBoard(boardId);
-  const teamId = me?.team?.id || "";
-  const writable = canWrite(me?.role);
-  const admin = canAdmin(me?.role);
+  // 首屏确定性闸门：useMe 是异步数据，SSR 永远没有 me，但 CSR 首帧可能因
+  // React Query 缓存已存在而直接拿到 me，导致由角色派生的按钮在首屏出现 /
+  // 消失，与 SSR HTML 结构不一致触发 hydration mismatch（React #418 的源头之一）。
+  // 通过 mounted 闸门让 SSR 与 CSR 首帧都使用「未就绪」状态，挂载后再渲染真实角色 UI。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const meReady = Boolean(me) && mounted;
+  const role = meReady ? me!.role : undefined;
+  const teamId = meReady ? (me!.team?.id || "") : "";
+  const currentUserId = meReady ? (me!.user?.id || "") : "";
+  const writable = canWrite(role);
+  const admin = canAdmin(role);
   const updateBoard = useUpdateBoard(teamId);
   const deleteBoard = useDeleteBoard(teamId);
   const [editing, setEditing] = useState(false);
@@ -151,13 +160,13 @@ export default function BoardView({ boardId }: { boardId: string }) {
         )}
         <div className="ml-auto flex items-center gap-2">
           <ViewSwitcher
-            teamId={me?.team?.id || ""}
+            teamId={teamId}
             currentView={view}
             filter={filter}
             sortKey={sortKey}
             sortDir={sortDir}
-            role={me?.role}
-            currentUserId={me?.user?.id || ""}
+            role={role}
+            currentUserId={currentUserId}
             onApplyView={applyView}
           />
           <div className="flex items-center rounded-[var(--radius-input)] border border-border p-0.5" aria-label="视图切换">
@@ -205,7 +214,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       </div>
 
       <BoardFilters
-        teamId={me?.team?.id || ""}
+        teamId={teamId}
         filter={filter}
         onChange={(next) =>
           setParams({
@@ -218,7 +227,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       {view === "list" ? (
         <TaskTable
           boardId={boardId}
-          teamId={me?.team?.id || ""}
+          teamId={teamId}
           columns={board?.columns ?? []}
           filter={filter}
           writable={writable}

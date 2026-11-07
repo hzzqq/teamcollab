@@ -23,12 +23,15 @@ WORK="$(mktemp -d)"
 STUB="$WORK/fake-service"
 BACKEND_PORT=18800
 FRONTEND_PORT=18801
+OTHER_PORT=18810          # 同仓库、不同端口的「不该被误杀」实例
+OTHER_PID=''
 
 COMMON_ENV=(env "PROJECT_DIR=$ROOT" "PYTHON_BIN=$STUB" "NODE_BIN=$STUB" "PG_READY_CMD=true")
 
 cleanup() {
   "${COMMON_ENV[@]}" bash "$START" --stop \
     --backend-port "$BACKEND_PORT" --frontend-port "$FRONTEND_PORT" >/dev/null 2>&1 || true
+  if [[ -n "$OTHER_PID" ]]; then kill "$OTHER_PID" 2>/dev/null || true; fi
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -127,6 +130,18 @@ ok "脚本退出后两个服务仍存活（脱离语义成立）"
 grep -q '登录成功' "$WORK/start.out" || fail "登录校验未通过"
 ok "端到端登录校验通过"
 
+# 隔离基线：另起一个「同仓库特征、不同端口」的实例。旧版 pgrep -f 不区分端口，会把它一并杀掉。
+nohup setsid "$STUB" -m uvicorn app.main:app --host 127.0.0.1 --port "$OTHER_PORT" \
+  > "$WORK/other.log" 2>&1 < /dev/null &
+OTHER_PID=$!
+for i in $(seq 1 20); do
+  curl -fsS --max-time 2 "http://127.0.0.1:$OTHER_PORT/" >/dev/null 2>&1 && break
+  sleep 0.2
+done
+curl -fsS --max-time 2 "http://127.0.0.1:$OTHER_PORT/" >/dev/null 2>&1 \
+  || fail ":$OTHER_PORT 独立实例未起来，隔离测试无效"
+ok "已在 :$OTHER_PORT 另起独立实例 (PID=$OTHER_PID)"
+
 # ---------------------------------------------------------------- 4/4 停止
 say "4/4 --stop (进程终止 + pidfile 清理)"
 "${COMMON_ENV[@]}" bash "$START" --stop \
@@ -140,5 +155,33 @@ for p in "$BACKEND_PORT" "$FRONTEND_PORT"; do
 done
 [[ ! -e "$ROOT/logs/backend.pid" && ! -e "$ROOT/logs/frontend.pid" ]] || fail "pidfile 未清理"
 ok "两个端口已释放，pidfile 已清理"
+
+# 关键回归：--stop 18800 绝不能带走 18810 上的同仓库实例
+curl -fsS --max-time 2 "http://127.0.0.1:$OTHER_PORT/" >/dev/null 2>&1 \
+  || fail ":$OTHER_PORT 独立实例被误杀 —— 端口隔离失效"
+ok ":$OTHER_PORT 独立实例仍存活（端口隔离成立）"
+kill "$OTHER_PID" 2>/dev/null || true
+OTHER_PID=''
+
+# ---------------------------------------------------------------- 5/4 真相源
+say "5/4 单一端口真相源 (.port.env 冲突阻断 + WEB_PORT 统一读取)"
+conflict_dir="$WORK/proj"
+mkdir -p "$conflict_dir"
+printf '# 由 port-doctor 生成\nPORT=5105\nWEB_PORT=18811\n' > "$conflict_dir/.port.env"
+set +e
+env PROJECT_DIR="$conflict_dir" PYTHON_BIN="$STUB" NODE_BIN="$STUB" PG_READY_CMD=true \
+  bash "$START" --what-if > "$WORK/conflict.out" 2>&1
+rc=$?
+set -e
+[[ $rc -ne 0 ]] || fail ".port.env PORT=5105 未阻断启动（会静默断链）"
+grep -q '配置冲突' "$WORK/conflict.out" || fail "缺少配置冲突说明与修复指引"
+ok "PORT≠8000 时硬失败并给出三条修复指引 (rc=$rc)"
+
+printf 'PORT=8000\nWEB_PORT=18811\n' > "$conflict_dir/.port.env"
+env PROJECT_DIR="$conflict_dir" PYTHON_BIN="$STUB" NODE_BIN="$STUB" PG_READY_CMD=true \
+  bash "$START" --what-if > "$WORK/webport.out" 2>&1
+grep -q '前端: http://localhost:18811' "$WORK/webport.out" || {
+  cat "$WORK/webport.out"; fail "WEB_PORT 未被统一读取为前端默认端口"; }
+ok "WEB_PORT=18811 被统一读取为前端默认端口"
 
 say "PASS: scripts/start-teamcollab.sh 在 $(uname -s)/$(uname -m) 上全链路验证通过"

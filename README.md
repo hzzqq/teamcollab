@@ -265,18 +265,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1 -WhatIf 
 ./scripts/start-teamcollab.sh --what-if
 ```
 
-脚本流程：确保 PostgreSQL 就绪 → **只**停本项目自己的陈旧 uvicorn / next 实例（按命令行特征匹配，
-绝不误杀 ks 或平台进程）→ 起后端 `:8000` + 前端 `:3000` → 幂等灌演示账号
-（`pm@example.com` / `dev@example.com`，均 `pass1234`）→ 轮询就绪 + 真实登录校验。
-日志落在仓库根 `logs/`（已 gitignore），`-Log` / `--log` 可看尾部。
+脚本流程：确保 PostgreSQL 就绪 → **只**停目标端口上本项目自己的陈旧 uvicorn / next 实例
+（pidfile + 命令行端口精确匹配，绝不误杀 ks、平台进程，也不误伤**同仓库其它端口**的实例）
+→ 起后端 + 前端 → 幂等灌演示账号（`pm@example.com` / `dev@example.com`，均 `pass1234`）
+→ 轮询就绪 + 真实登录校验。日志落在仓库根 `logs/`（已 gitignore），`-Log` / `--log` 可看尾部。
 
-> 已知限制（`.sh`）：`pgrep -f` 兜底按命令行特征匹配、**不区分端口**，同一仓库若在别的端口
-> 另起过实例（例如 `:8011` 的验证实例），会被一并停掉。单实例演示场景不受影响。
+**端口真相源（唯一）**：仓库根 `.port.env`（port-doctor 生成、本机文件、已 gitignore）。
+优先级统一为「显式 `-BackendPort` / `--backend-port` 等参数 > 同名环境变量 > `.port.env` >
+默认（`PORT=8000` / `WEB_PORT=3000`）」，`port_env.py`、`start_dev.py`、`.ps1`、`.sh` 同口径。
 
-**端口真相源**：前端 `NEXT_PUBLIC_API_BASE` 在 `next build` 时烤死为 `http://localhost:8000`，
-故后端默认 8000。仓库根 `.port.env`（port-doctor 生成、本机文件、已 gitignore）里的 `PORT`
-可能是别的值——脚本会**显式警告但不自动跟随**，避免后端换端口导致前后端静默断链。
-确需换端口：显式 `-BackendPort` / `--backend-port`，并同步重编前端或配 nginx 同源代理。
+硬约束：前端 `NEXT_PUBLIC_API_BASE` 在 `next build` 时烤死为 `http://localhost:8000`，
+**后端端口不可由 port-doctor 自由分配**。若 `.port.env` 给了非 8000 的 `PORT` 且未经显式覆盖，
+三个启动入口会**一致报错退出**并给出三条修复路径（改回 8000 / 显式指定端口并同步重编前端 /
+配 nginx 同源代理），绝不静默启动必然断链的服务；`-Stop` / `--stop` 不受阻断，随时能停服务。
+`WEB_PORT` 则被正常读取为前端默认端口，换前端端口不影响 API 连通。
 
 **跨天提示**：本机后台进程会在跨天 / 重启时被清掉，服务不是常驻守护进程；重新跑一次脚本即可
 恢复（PG 已服务化会自动就绪）。ks/StockSignal 用 8899/5050/5052，与本项目 3000/8000 不重叠，
@@ -290,6 +292,21 @@ CI 由 `e2e-browser` job 执行。
 
 **脚本自身的回归**：`scripts/ci/verify-startup-sh.sh` 在 GitHub Actions `ubuntu-24.04`
 （真 Linux）上验证 `.sh` 的 `bash -n` / LF / 无 BOM、`--what-if` 全流程、
-`nohup setsid` 脱离启动 + pidfile + 脚本退出后进程仍存活、登录校验与 `--stop` 清理，
-对应 CI job `validate-startup-sh`。用最小 HTTP 替身解耦应用本身，真实 uvicorn / next
-进程的启动由 `e2e-browser` job 覆盖。
+`nohup setsid` 脱离启动 + pidfile + 脚本退出后进程仍存活、登录校验、`--stop` 清理，
+**双端口隔离**（`:18810` 独立实例在 `--stop :18800` 后必须仍存活）、
+`.port.env` 冲突阻断与 `WEB_PORT` 统一读取，对应 CI job `validate-startup-sh`。
+用最小 HTTP 替身解耦应用本身，真实 uvicorn / next 进程的启动由 `e2e-browser` job 覆盖。
+`port_env.py` 的纯函数单测在 `server/tests/test_port_env.py`（CI backend job 执行）。
+
+**端口冲突排查（多项目同机演示）**：`scripts/port-resolver.ps1`（Windows PowerShell 5.1）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Probe
+powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Port 8000
+powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Port 3000 -Free -Project teamcollab -WhatIf
+powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Port 8000 -FindFree
+```
+
+只读列出常用演示端口的占用归属（含 HTTP 标题识别应用），`-Free` 仅在进程路径命中
+`-Project` 或显式 `-Force` 时才释放，`-WhatIf` 只预报。仓库外旧路径
+`E:\project\port-resolver.ps1` 已改为薄转发器，旧命令仍可用。

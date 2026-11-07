@@ -23,16 +23,17 @@
   运行需绕过执行策略：powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1
   跨天/重启后服务会被系统清掉，直接再跑一次本脚本即可恢复（PG 已服务化会自动拉起）。
   Linux / WSL 请用同目录的 start-teamcollab.sh（bash + nohup setsid）。
-  端口真相源：前端 NEXT_PUBLIC_API_BASE 在 build 时烤死为 http://localhost:8000，
-    故本脚本后端默认 8000 以保证前后端连通。仓库根 .port.env 由 port-doctor 写入
-    PORT / WEB_PORT（本机文件、已 gitignore）；若其中 PORT≠8000，脚本会显式警告但
-    仍按 8000 启动，避免后端换端口造成前后端静默断链。要跟随请显式 -BackendPort
-    并同步重编前端（或配 nginx 同源代理）。
+  端口真相源（唯一）：仓库根 .port.env（port-doctor 生成、本机文件、已 gitignore）。
+    优先级：显式 -BackendPort/-FrontendPort > 同名环境变量 > .port.env > 默认(8000/3000)。
+    与 port_env.py / start_dev.py 同口径。前端 NEXT_PUBLIC_API_BASE 在 build 时烤死 8000，
+    故 .port.env 若给了非 8000 的 PORT 且未经显式覆盖，脚本直接报错退出（绝不静默断链）；
+    WEB_PORT 则被正常读取为前端默认端口（换前端端口不影响 API 连通）。
 #>
 [CmdletBinding()]
 param(
-  [int]$BackendPort  = 8000,
-  [int]$FrontendPort = 3000,
+  # 0 = 未显式指定，交给下方「单一端口真相源」段解析 .port.env / 环境变量 / 默认值
+  [int]$BackendPort  = 0,
+  [int]$FrontendPort = 0,
   [string]$ProjectDir = '',
   [switch]$Stop,
   [switch]$SkipSeed,
@@ -204,25 +205,46 @@ function Wait-Port {
   return $false
 }
 
-# ---------------- 主流程 ----------------
-Write-Step "TeamCollab 一键$(if($Stop){'停止'}else{'干净启动'}) (后端:$BackendPort 前端:$FrontendPort)"
-
-# .port.env 由 port-doctor 写入（本机文件、已 gitignore）。若 PORT 与脚本后端端口不一致，
-# 显式警告但不改端口 —— 前端 API_BASE 烤死 8000，静默跟随会导致前后端断链。
+# ---------------- 单一端口真相源：.port.env ----------------
+# 优先级：显式 -BackendPort/-FrontendPort > 同名环境变量 > .port.env > 默认(8000/3000)
+# 与 port_env.py / start_dev.py 完全同口径；三入口对冲突做同一件事：拒绝静默启动断链服务。
 $portEnvFile = Join-Path $ProjectDir '.port.env'
+$envBackend = $null; $envFrontend = $null
 if (Test-Path $portEnvFile) {
-  $envPort = $null
   foreach ($line in @(Get-Content -LiteralPath $portEnvFile -Encoding UTF8 -ErrorAction SilentlyContinue)) {
-    if ($line -match '^\s*PORT\s*=\s*(\d+)\s*$') { $envPort = [int]$matches[1]; break }
+    if ($line -match '^\s*PORT\s*=\s*(\d+)\s*$' -and $null -eq $envBackend) { $envBackend = [int]$matches[1] }
+    if ($line -match '^\s*WEB_PORT\s*=\s*(\d+)\s*$' -and $null -eq $envFrontend) { $envFrontend = [int]$matches[1] }
   }
-  if ($null -ne $envPort -and $envPort -ne $BackendPort) {
-    Write-Warn "检测到 .port.env PORT=$envPort；前端 NEXT_PUBLIC_API_BASE 在 build 时烤死为 http://localhost:8000"
-    Write-Warn "  本脚本后端按 :$BackendPort 启动，不自动跟随 .port.env，避免前后端静默断链"
-  }
+}
+$backendExplicit = ($BackendPort -ne 0)
+$frontendExplicit = ($FrontendPort -ne 0)
+$envBackendOverride = "$env:BACKEND_PORT"
+$envFrontendOverride = "$env:FRONTEND_PORT"
+$backendFromEnvFile = $false
+if (-not $backendExplicit) {
+  if ($envBackendOverride -match '^\d+$') { $BackendPort = [int]$envBackendOverride }
+  elseif ($null -ne $envBackend) { $BackendPort = $envBackend; $backendFromEnvFile = $true }
+  else { $BackendPort = 8000 }
+}
+if (-not $frontendExplicit) {
+  if ($envFrontendOverride -match '^\d+$') { $FrontendPort = [int]$envFrontendOverride }
+  elseif ($null -ne $envFrontend) { $FrontendPort = $envFrontend }
+  else { $FrontendPort = 3000 }
+}
+if ($backendFromEnvFile -and $BackendPort -ne 8000) {
+  Write-Err "配置冲突：.port.env PORT=$BackendPort，但前端 NEXT_PUBLIC_API_BASE 在 build 时烤死为 http://localhost:8000"
+  Write-Err "  按 :$BackendPort 起后端，前端会静默连不上。三选一："
+  Write-Err "    ① 把 .port.env 的 PORT 改回 8000（推荐；port-doctor 不应给本项目后端分配其它端口）"
+  Write-Err "    ② 显式 -BackendPort $BackendPort 并同步重编前端（NEXT_PUBLIC_API_BASE=http://localhost:$BackendPort npm run build）"
+  Write-Err "    ③ 配 nginx 同源代理，前端统一走同源 /api"
+  if (-not $Stop) { exit 1 } else { Write-Warn '  -Stop 模式不受阻断，继续停止本项目实例' }
 }
 if ($BackendPort -ne 8000) {
-  Write-Err "  [!] 后端 :$BackendPort 与前端写死的 8000 不一致，前端将连不上；需同步重编前端或配 nginx 同源代理"
+  Write-Warn "后端 :$BackendPort ≠ 8000（显式指定）：前端写死的 API_BASE 将连不上，需同步重编前端或同源代理"
 }
+
+# ---------------- 主流程 ----------------
+Write-Step "TeamCollab 一键$(if($Stop){'停止'}else{'干净启动'}) (后端:$BackendPort 前端:$FrontendPort)"
 
 $isBackend  = { param($c) ($c -match 'project4') -or (($c -match 'uvicorn') -and ($c -match [regex]::Escape("--port $BackendPort"))) }
 $isFrontend = { param($c) ($c -match 'project4') -or (($c -match 'next') -and ($c -match 'start') -and ($c -match [regex]::Escape("-p $FrontendPort"))) }

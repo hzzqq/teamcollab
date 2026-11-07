@@ -18,17 +18,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path as _Path
 
 _ROOT = _Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from port_env import resolve_port  # noqa: E402
-import subprocess
-import sys
-import time
+from port_env import backend_port_issue, resolve_port  # noqa: E402
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(ROOT, "server")
@@ -92,8 +91,14 @@ def migrate() -> bool:
 
 def start_backend() -> int:
     log("启动 FastAPI 后端（前台，Ctrl+C 退出）...")
-    # 端口优先级：BACKEND_PORT 环境变量 > .port.env（port-doctor 分配） > 8000
+    # 单一端口真相源：BACKEND_PORT 环境变量 > .port.env > 8000（与 .ps1/.sh 同口径）
+    env_override = (os.environ.get("BACKEND_PORT") or "").strip()
     port = resolve_port("PORT", 8000, env_var="BACKEND_PORT")
+    issue = backend_port_issue(port, explicit=bool(env_override))
+    if issue:
+        # 不再静默用 port-doctor 分配的端口（前端 API_BASE 烤死 8000 会断链）
+        log("端口配置冲突，拒绝启动必然断链的服务：\n  " + issue)
+        return 4
     return run([venv_python(), "-m", "uvicorn", "app.main:app", "--port", str(port), "--reload"], cwd=SERVER).returncode
 
 

@@ -22,9 +22,11 @@
 # 可覆盖的环境变量：
 #   PROJECT_DIR / PYTHON_BIN / NODE_BIN / PG_PORT / PG_READY_CMD / CURL_BIN
 #
-# 端口真相源：前端 NEXT_PUBLIC_API_BASE 在 build 时烤死为 http://localhost:8000，
-#   故后端默认 8000 保证前后端连通。仓库根 .port.env（port-doctor 生成、已 gitignore）
-#   若其中 PORT≠8000，脚本显式警告但仍按 8000 启动，避免静默断链。
+# 端口真相源（唯一）：仓库根 .port.env（port-doctor 生成、本机文件、已 gitignore）。
+#   优先级：显式 --backend-port/--frontend-port > 同名环境变量 > .port.env > 默认(8000/3000)。
+#   与 port_env.py / start_dev.py 同口径。前端 NEXT_PUBLIC_API_BASE 在 build 时烤死 8000，
+#   故 .port.env 若给了非 8000 的 PORT 且未经显式覆盖，脚本直接报错退出（绝不静默断链）。
+#   WEB_PORT 则被正常读取为前端默认端口（换前端端口不影响 API 连通）。
 
 set -euo pipefail
 
@@ -39,8 +41,12 @@ NODE_BIN="${NODE_BIN:-node}"
 CURL_BIN="${CURL_BIN:-curl}"
 PG_PORT="${PG_PORT:-5432}"
 
-BACKEND_PORT=8000
-FRONTEND_PORT=3000
+# 端口在下方「单一端口真相源」段统一解析；这里先收下同名环境变量并清空，
+# 避免与脚本内部变量混淆。优先级：显式参数 > 环境变量 > .port.env > 默认。
+ENV_BACKEND_PORT="${BACKEND_PORT:-}"
+ENV_FRONTEND_PORT="${FRONTEND_PORT:-}"
+BACKEND_PORT=''; FRONTEND_PORT=''
+BACKEND_EXPLICIT=0; FRONTEND_EXPLICIT=0
 STOP=0; DRY=0; SKIP_SEED=0; AUTO_AVOID=0; SHOW_LOG=0; TAIL_N=40
 
 while [[ $# -gt 0 ]]; do
@@ -50,8 +56,8 @@ while [[ $# -gt 0 ]]; do
     --skip-seed) SKIP_SEED=1; shift ;;
     --auto-avoid) AUTO_AVOID=1; shift ;;
     --log) SHOW_LOG=1; if [[ "${2:-}" =~ ^[0-9]+$ ]]; then TAIL_N="$2"; shift; fi; shift ;;
-    --backend-port) BACKEND_PORT="$2"; shift 2 ;;
-    --frontend-port) FRONTEND_PORT="$2"; shift 2 ;;
+    --backend-port) BACKEND_PORT="$2"; BACKEND_EXPLICIT=1; shift 2 ;;
+    --frontend-port) FRONTEND_PORT="$2"; FRONTEND_EXPLICIT=1; shift 2 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
@@ -78,26 +84,28 @@ if (( SHOW_LOG )); then
   exit 0
 fi
 
-# 只杀命令行明确属于本项目的旧实例，绝不误杀 ks / 其它服务
+# 只停「目标端口」上的本项目实例：pidfile + 命令行端口精确匹配兜底。
+# 端口边界很重要：--port 8000 不能命中 --port 80001；同仓库其它端口的实例绝不被误杀。
 stop_one(){
-  local pattern="$1" pidfile="$2" p
+  local pattern="$1" pidfile="$2" port="$3" p
+  local port_re='(--port[ =]|-p[ =])'"${port}"'([^0-9]|$)'
   if [[ -f "$pidfile" ]]; then
     p="$(cat "$pidfile" 2>/dev/null || true)"
     if [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; then
-      if (( DRY )); then warn "[what-if] 将结束 PID=$p (pidfile)"; else kill "$p" 2>/dev/null || true; ok "已结束旧实例 PID=$p"; fi
+      if (( DRY )); then warn "[what-if] 将结束 PID=$p (pidfile)"; else kill "$p" 2>/dev/null || true; ok "已结束旧实例 PID=$p (pidfile)"; fi
     fi
     (( DRY )) || rm -f "$pidfile"
   fi
-  # 兜底：按特征精确匹配；pidfile 记的可能是包装进程，这里按命令行再扫一遍
+  # 兜底：pgrep 按特征扫，再用 /proc 校验命令行里的端口，只杀本端口实例
   local ids
   ids="$(pgrep -f "$pattern" 2>/dev/null || true)"
   for p in $ids; do
     local cmd
     cmd="$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null || true)"
-    if [[ "$cmd" == *project4* ]] || [[ "$cmd" == *"$pattern"* ]]; then
-      if (( DRY )); then warn "[what-if] 将结束 PID=$p (本项目旧实例)"; else kill "$p" 2>/dev/null || true; ok "已结束旧实例 PID=$p"; fi
+    if [[ "$cmd" =~ $port_re ]]; then
+      if (( DRY )); then warn "[what-if] 将结束 PID=$p (:$port 本项目旧实例)"; else kill "$p" 2>/dev/null || true; ok "已结束旧实例 PID=$p (:$port)"; fi
     else
-      warn "PID=$p 非本项目，跳过不杀"
+      warn "PID=$p 非 :$port 实例，跳过不杀（避免误伤同仓库其它端口）"
     fi
   done
 }
@@ -120,22 +128,50 @@ wait_port(){
   return 1
 }
 
-if (( STOP )); then MODE='停止'; else MODE='干净启动'; fi
-step "TeamCollab 一键$MODE (后端:$BACKEND_PORT 前端:$FRONTEND_PORT)"
-
-# .port.env 由 port-doctor 写入（本机文件、已 gitignore）。PORT≠脚本端口时只警告不跟随：
-# 前端 API_BASE 烤死 8000，静默跟随会导致前后端断链。
+# ---------------- 单一端口真相源：.port.env ----------------
+# 优先级：显式 --backend-port/--frontend-port > 同名环境变量 > .port.env > 默认(8000/3000)
+# 与 port_env.py / start_dev.py 完全同口径；三入口对冲突做同一件事：拒绝静默启动断链服务。
 PORT_ENV_FILE="$PROJECT_DIR/.port.env"
+env_backend_port=''; env_frontend_port=''
 if [[ -f "$PORT_ENV_FILE" ]]; then
-  env_port="$(sed -n 's/^[[:space:]]*PORT[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$PORT_ENV_FILE" | head -1 || true)"
-  if [[ -n "$env_port" && "$env_port" != "$BACKEND_PORT" ]]; then
-    warn "检测到 .port.env PORT=$env_port；前端 NEXT_PUBLIC_API_BASE 在 build 时烤死为 http://localhost:8000"
-    warn "  本脚本后端按 :$BACKEND_PORT 启动，不自动跟随 .port.env，避免前后端静默断链"
-  fi
+  env_backend_port="$(sed -n 's/^[[:space:]]*PORT[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$PORT_ENV_FILE" | head -1 || true)"
+  env_frontend_port="$(sed -n 's/^[[:space:]]*WEB_PORT[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$PORT_ENV_FILE" | head -1 || true)"
+fi
+
+backend_from_env_file=0
+if (( BACKEND_EXPLICIT )); then
+  :   # 显式参数优先级最高
+elif [[ -n "$ENV_BACKEND_PORT" ]]; then
+  BACKEND_PORT="$ENV_BACKEND_PORT"
+elif [[ -n "$env_backend_port" ]]; then
+  BACKEND_PORT="$env_backend_port"; backend_from_env_file=1
+else
+  BACKEND_PORT=8000
+fi
+if (( FRONTEND_EXPLICIT )); then
+  :
+elif [[ -n "$ENV_FRONTEND_PORT" ]]; then
+  FRONTEND_PORT="$ENV_FRONTEND_PORT"
+elif [[ -n "$env_frontend_port" ]]; then
+  FRONTEND_PORT="$env_frontend_port"
+else
+  FRONTEND_PORT=3000
+fi
+
+if (( backend_from_env_file )) && [[ "$BACKEND_PORT" != "8000" ]]; then
+  err "配置冲突：.port.env PORT=$BACKEND_PORT，但前端 NEXT_PUBLIC_API_BASE 在 build 时烤死为 http://localhost:8000"
+  err "  按 :$BACKEND_PORT 起后端，前端会静默连不上。三选一："
+  err "    ① 把 .port.env 的 PORT 改回 8000（推荐；port-doctor 不应给本项目后端分配其它端口）"
+  err "    ② 显式 --backend-port $BACKEND_PORT 并同步重编前端（NEXT_PUBLIC_API_BASE=http://localhost:$BACKEND_PORT npm run build）"
+  err "    ③ 配 nginx 同源代理，前端统一走同源 /api"
+  if (( STOP )); then warn "  --stop 模式不受阻断，继续停止本项目实例"; else exit 1; fi
 fi
 if [[ "$BACKEND_PORT" != "8000" ]]; then
-  err "  [!] 后端 :$BACKEND_PORT 与前端写死的 8000 不一致，前端将连不上；需同步重编前端或配 nginx 同源代理"
+  warn "后端 :$BACKEND_PORT ≠ 8000（显式指定）：前端写死的 API_BASE 将连不上，需同步重编前端或同源代理"
 fi
+
+if (( STOP )); then MODE='停止'; else MODE='干净启动'; fi
+step "TeamCollab 一键$MODE (后端:$BACKEND_PORT 前端:$FRONTEND_PORT)"
 
 # 端口被非本项目占用时的避让决策（与 Windows 版同口径）
 if port_listening "$BACKEND_PORT"; then
@@ -144,7 +180,7 @@ if port_listening "$BACKEND_PORT"; then
     alt="$(find_free_port "$BACKEND_PORT" || true)"
     if [[ -n "$alt" ]]; then
       warn "  --auto-avoid：后端改用 :$alt"
-      err "  [!] 前端 NEXT_PUBLIC_API_BASE 烤死为 http://localhost:$BACKEND_PORT，后端换端口会断链；需重编前端或同源代理"
+      err "  [!] 前端 NEXT_PUBLIC_API_BASE 烤死为 http://localhost:8000，后端换端口会断链；需重编前端或同源代理"
       BACKEND_PORT="$alt"
     fi
   else
@@ -159,8 +195,8 @@ if port_listening "$FRONTEND_PORT"; then
   fi
 fi
 
-stop_one "app.main:app" "$BACKEND_PID"
-stop_one "next start"  "$FRONTEND_PID"
+stop_one "app.main:app" "$BACKEND_PID"  "$BACKEND_PORT"
+stop_one "next start"  "$FRONTEND_PID" "$FRONTEND_PORT"
 if (( STOP )); then ok "已停止本项目实例"; exit 0; fi
 
 # PostgreSQL 就绪检查（发行版差异：可覆盖 PG_READY_CMD）

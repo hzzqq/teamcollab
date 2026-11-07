@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { isOverdue } from "@/lib/format";
 
 export interface MyTasksParams {
@@ -13,7 +14,8 @@ export interface MyTasksParams {
 
 /** 我的任务（跨项目聚合，逾期置顶 AC-06） */
 export function useMyTasks(params: MyTasksParams) {
-  return useQuery({
+  const hydrated = useHydrated();
+  const query = useQuery({
     queryKey: ["me-tasks", params],
     queryFn: async () => {
       const res = await api.meTasks({
@@ -32,4 +34,7 @@ export function useMyTasks(params: MyTasksParams) {
       return { ...res, items: sorted };
     },
   });
+  // 首屏闸门：缓存命中时 CSR 首帧 isLoading 直接变 false 而 SSR 恒为 true，
+  // StateSwitch 内容 vs 骨架屏不一致（React #418）。挂载前强制 isLoading=true。
+  return { ...query, isLoading: hydrated ? query.isLoading : true };
 }

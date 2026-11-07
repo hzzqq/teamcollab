@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, LayoutGrid, List, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { ViewSwitcher } from "@/components/kanban/view-switcher";
 import type { BoardFilter } from "@/lib/board-filter";
 import { useMe, canWrite, canAdmin } from "@/hooks/use-me";
 import { useBoard, useUpdateBoard, useDeleteBoard } from "@/hooks/use-board";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -24,14 +25,15 @@ export default function BoardView({ boardId }: { boardId: string }) {
   const searchParams = useSearchParams();
   const taskId = searchParams.get("task");
   const { data: me } = useMe();
-  const { data: board } = useBoard(boardId);
-  // 首屏确定性闸门：useMe 是异步数据，SSR 永远没有 me，但 CSR 首帧可能因
-  // React Query 缓存已存在而直接拿到 me，导致由角色派生的按钮在首屏出现 /
-  // 消失，与 SSR HTML 结构不一致触发 hydration mismatch（React #418 的源头之一）。
-  // 通过 mounted 闸门让 SSR 与 CSR 首帧都使用「未就绪」状态，挂载后再渲染真实角色 UI。
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const meReady = Boolean(me) && mounted;
+  const { data: rawBoard } = useBoard(boardId);
+  // 首屏确定性闸门（全局 useHydrated）：useMe / useBoard 都是异步数据，SSR 永远拿不到，
+  // 但同会话前序页面若已拉过同一 queryKey，CSR 首帧会缓存命中直接拿到数据，导致由角色
+  // 派生的按钮、看板标题等在首屏出现 / 消失，与 SSR HTML 不一致触发 #418。
+  // useMe 已在内部用 useHydrated 闸门 data；这里再对 board 直接消费的数据做同样闸门，
+  // 保证 SSR 与 CSR 首帧都「未就绪」，挂载后再渲染真实内容。
+  const hydrated = useHydrated();
+  const board = hydrated ? rawBoard : undefined;
+  const meReady = Boolean(me);
   const role = meReady ? me!.role : undefined;
   const teamId = meReady ? (me!.team?.id || "") : "";
   const currentUserId = meReady ? (me!.user?.id || "") : "";

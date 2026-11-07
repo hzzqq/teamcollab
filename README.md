@@ -340,19 +340,34 @@ CI `validate-startup-sh` job 在 `ubuntu-24.04` 上实测。
 SSR/CSR 恒为 `light`、挂载后再对齐 localStorage（真实主题仍由 `<head>` 同步脚本保证无 FOUC）。
 E2E 现同时收集 `console.error` 与 `pageerror` 堆栈 + 触发 URL，复发时可直接定点定位。
 
-**根因已确定性复现并修复**：手动 `hydration-probe` job 在 `next dev`（非 minified）下
-**10/10 轮稳定复现**（每轮 2 条、共 20 条 hydration 错误，均落在 `/boards/[boardId]` 页面）。
-定位到 `web/src/app/(app)/boards/[boardId]/board-view.tsx`：它用 `useMe()` 的异步数据算
-`canWrite`/`canAdmin`，SSR 永远没有 `me`，但 CSR 首帧可能因 React Query 缓存已存在而直接拿到
-`me`，导致由角色派生的「重命名 / 删除看板」按钮在首屏出现，与 SSR HTML 结构不一致。
-修复沿用 `RelativeTime` / `use-theme` 的 **mounted 闸门**模式：SSR 与 CSR 首屏统一为「未就绪」状态，
-挂载后再渲染真实角色 UI，保证首屏 DOM 一致。复跑 `hydration-probe` → **`hydration_errors=0`（10/10 全清）**。
-**诚实边界**：该诊断通道只覆盖 `/login` → `/me/tasks` → 列表视图 → 任务详情深链 这条路径，
-其它未被执行到的 `useMe` 派生条件渲染若残留不一致，需补路由覆盖或复发时再定点修。
+**根因已确定性复现并修复（两层）**：手动 `hydration-probe` job 在 `next dev`（非 minified）下
+**10/10 轮稳定复现**（首跑每轮 2 条、共 20 条 hydration 错误，均落在 `/boards/[boardId]` 页面）。
+
+- **第一层（身份 UI）**：`web/src/app/(app)/boards/[boardId]/board-view.tsx` 用 `useMe()` 的异步数据算
+  `canWrite`/`canAdmin`，SSR 永远没有 `me`，但 CSR 首帧可能因 React Query 缓存已存在而直接拿到
+  `me`，导致由角色派生的「重命名 / 删除看板」按钮在首屏出现，与 SSR HTML 结构不一致。
+  修复沿用 `RelativeTime` / `use-theme` 的 **mounted 闸门**模式：SSR 与 CSR 首屏统一为「未就绪」状态，
+  挂载后再渲染真实角色 UI，保证首屏 DOM 一致。复跑 `hydration-probe` → `hydration_errors=0`（10/10 全清）。
+
+- **第二层（加载态 / StateSwitch）**：扩覆盖到全部 `(app)` 路由后，剩余 **9 条错误全部落在 `/projects`
+  与 `/admin`**。根因是 `useMyTeams()`（及 `useMe` 内部预取的 teams 查询）在缓存命中时，CSR 首帧
+  `isLoading=false`（直接渲染内容 `grid`），而 SSR 恒为 `isLoading=true`（骨架屏 `space-y-2`），
+  `StateSwitch` 分支不一致；`/admin` 则表现为首屏 `meLoading=false` 直接渲染「无访问权限」而 SSR 渲染骨架。
+  **系统性修复**：新增 `hooks/use-hydrated.ts` 的全局 `useHydrated` 闸门（首屏水合前恒 false、SSR 恒 false、
+  挂载后置 true，且后续客户端路由跳转不再反复闪骨架屏），让 `useMyTeams` / `useBoards` / `useBoard` /
+  `useMembers` / `useLabels` / `useMyTasks` 的 `isLoading` 与 `useMe` 的 `data`/`isSuperuser`/`isLoading`
+  在首屏统一为「未就绪」，挂载后放开。复用全局标志位而非组件局部 `useState`，避免把「首屏确定性」错做成
+  「每次路由跳转都退化成加载态」。`board-view` 也改用该闸门并对 `board` 直接消费的数据做同样处理。
+  复跑 `hydration-probe` → 目标 `hydration_errors=0`。
+
+**诚实边界**：诊断通道已覆盖全部 `(app)` 路由（含 `/boards`、`/projects`、`/teams/{id}/members`、
+`/teams/{id}/settings`、`/admin`），修复针对所有「`StateSwitch` + 异步数据首帧」的页面做了系统性闸门；
+若未来新增同类页面未加 `useHydrated` 闸门，仍可能复发——属代码规范问题，复发时按同法补闸门即可。
 
 **非 minified 诊断通道（手动触发，不是门禁）**：`web/e2e/hydration-probe.js` 在
 `next dev`（React 开发版、错误信息不压缩）下跑 N 轮，每轮新建唯一账号/看板，
-走 `/login` → `/me/tasks` → 列表视图 → 任务详情抽屉深链，收集
+走 `/login` → `/me/tasks` → 列表视图 → 任务详情抽屉深链，再扩覆盖 `/boards`、`/projects`、
+`/teams/{id}/members`、`/teams/{id}/settings`、`/admin` 等全部 `(app)` 路由，收集
 `console.error` 全文 + 序列化 args + `location` + `pageerror` 完整 stack + 触发 URL。
 在 GitHub Actions 手动执行 workflow（**Actions → CI → Run workflow**），可填
 `probe_rounds`（默认 10）；`hydration-probe` job 会起真 PG/Redis/后端 +

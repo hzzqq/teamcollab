@@ -280,26 +280,33 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # IMPORTANT: keep every `shell: powershell` run block ASCII-only.
+      # Actions writes the run block to a UTF-8 (no BOM) temp .ps1, but Windows
+      # PowerShell 5.1 decodes it as GBK. CJK text then turns into mojibake, and
+      # some mangled bytes (e.g. a curly quote) break the parser outright.
+      # CI run 42358171095 failed exactly this way. The product scripts themselves
+      # stay UTF-8 BOM and are invoked via -File, so 5.1 reads them correctly.
       - name: 真机实跑 scripts/port-resolver.ps1 -Probe
         shell: powershell
         run: |
           powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Probe
-          if ($LASTEXITCODE -ne 0) { throw "-Probe 退出码 $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "Probe failed with exit code $LASTEXITCODE" }
 
       - name: 真机校验 -Port 3000 -FindFree 返回可用端口
         shell: powershell
-        # 坑：-FindFree 必须和 -Port 一起给（脚本里是 `if ($FindFree -and $Port)`），单独传会空跑
+        # -FindFree only works together with -Port (script: `if ($FindFree -and $Port)`).
+        # The nested 5.1 process may emit GBK-mangled CJK, so match the trailing
+        # port number instead of the Chinese label. Out-String guarantees a scalar
+        # so that -match populates $Matches (it would not on an array).
         run: |
           $out = powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Port 3000 -FindFree
-          if ($LASTEXITCODE -ne 0) { throw "-FindFree 退出码 $LASTEXITCODE" }
-          # 合并成单个字符串：数组上用 -match 不会填充 $Matches；且中文可能被 GBK 解码成
-          # 乱码，故只匹配行尾端口号，不依赖中文文案。
+          if ($LASTEXITCODE -ne 0) { throw "FindFree failed with exit code $LASTEXITCODE" }
           $text = ($out | Out-String).Trim()
           Write-Host $text
-          if (-not ($text -match ':\s*(\d{4,5})\s*$')) { throw "-FindFree 未返回空闲端口: $text" }
+          if (-not ($text -match ':\s*(\d{4,5})\s*$')) { throw "FindFree did not return a port: $text" }
           $free = [int]$Matches[1]
-          if ($free -lt 3000 -or $free -ge 3200) { throw "空闲端口超出 3000~3199 区间: $free" }
-          Write-Host "OK: -FindFree 返回 $free"
+          if ($free -lt 3000 -or $free -ge 3200) { throw "Free port outside 3000..3199: $free" }
+          Write-Host "OK: -FindFree returned $free"
 
   # 手动触发：在 next dev（React 非 minified）下跑 N 轮，抓 hydration 错误的完整组件栈。
   # 生产 build 只给 `Minified React error #418` 一行，无法定位组件；dev 版会打印组件树。

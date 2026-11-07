@@ -353,16 +353,27 @@ E2E 现同时收集 `console.error` 与 `pageerror` 堆栈 + 触发 URL，复发
   与 `/admin`**。根因是 `useMyTeams()`（及 `useMe` 内部预取的 teams 查询）在缓存命中时，CSR 首帧
   `isLoading=false`（直接渲染内容 `grid`），而 SSR 恒为 `isLoading=true`（骨架屏 `space-y-2`），
   `StateSwitch` 分支不一致；`/admin` 则表现为首屏 `meLoading=false` 直接渲染「无访问权限」而 SSR 渲染骨架。
-  **系统性修复**：新增 `hooks/use-hydrated.ts` 的全局 `useHydrated` 闸门（首屏水合前恒 false、SSR 恒 false、
-  挂载后置 true，且后续客户端路由跳转不再反复闪骨架屏），让 `useMyTeams` / `useBoards` / `useBoard` /
-  `useMembers` / `useLabels` / `useMyTasks` 的 `isLoading` 与 `useMe` 的 `data`/`isSuperuser`/`isLoading`
-  在首屏统一为「未就绪」，挂载后放开。复用全局标志位而非组件局部 `useState`，避免把「首屏确定性」错做成
-  「每次路由跳转都退化成加载态」。`board-view` 也改用该闸门并对 `board` 直接消费的数据做同样处理。
-  复跑 `hydration-probe` → 目标 `hydration_errors=0`。
+  **修复（局部 mounted 闸门）**：`useMyTeams` / `useBoards` / `useBoard` / `useMembers` / `useLabels` /
+  `useMyTasks` 各自用组件局部 `useState(mounted)` + `useEffect(() => setMounted(true), [])` 闸门，
+  强制首帧 `isLoading=true`、挂载后放开；`useMe` 的 `data`/`isSuperuser`/`isLoading` 同样用自身局部
+  `mounted` 闸门。`board-view` 也对角色派生 UI 用局部 `mounted`（`meReady = Boolean(me) && mounted`），
+  `board` 数据直接消费（`useBoard` 自身闸门已覆盖首屏骨架）。
+
+  ⚠️ **踩坑复盘（全局标志位是反模式）**：本层最初尝试过 `hooks/use-hydrated.ts` 的**全局 `useHydrated`
+  标志位**（模块级 `let globalHydrated`，各实例 `useState(globalHydrated)` + effect 置 true）。该方案在
+  `e2e-browser` 下**确定性失败**：`useMe` 既直接调用 `useHydrated()`、又经 `useMyTeams()` 内部再调，同一
+  组件内多个实例共用同一全局标志位——先 mount 的实例把全局置 true 后，后 mount 的实例 effect 见全局已
+  true 直接 early-return、**永不更新自己的本地 state** → `useMyTeams().isLoading` 永久卡 `true`
+  （所有消费页永久骨架屏），且 `useMe().data` 永久 `undefined`（「新建看板」按钮因 `teamId` 空而
+  `disabled`）。更糟：layout/sidebar 先 mount 把全局置 true 后，page 级 `useMe`/`useBoards` 的实例
+  effect 全 early-return → page 的 `useMe().data` 永久 `undefined`。**结论：首屏确定性必须用组件局部
+  `mounted`，绝不能用跨组件共享的全局布尔。** `hydration-probe` 退出码恒 0、两端都「骨架屏」时判定为
+  「一致」而报 success（假阳性），此类功能性回归只能靠 `e2e-browser` 抓到——probe 零错误 ≠ 无回归。
+  复跑 `hydration-probe` → `hydration_errors=0`（真值验证需配合 `e2e-browser` 全绿）。
 
 **诚实边界**：诊断通道已覆盖全部 `(app)` 路由（含 `/boards`、`/projects`、`/teams/{id}/members`、
-`/teams/{id}/settings`、`/admin`），修复针对所有「`StateSwitch` + 异步数据首帧」的页面做了系统性闸门；
-若未来新增同类页面未加 `useHydrated` 闸门，仍可能复发——属代码规范问题，复发时按同法补闸门即可。
+`/teams/{id}/settings`、`/admin`），修复针对所有「`StateSwitch` + 异步数据首帧」的页面做了系统性局部
+mounted 闸门；若未来新增同类页面未加该闸门，仍可能复发——属代码规范问题，复发时按同法补闸门即可。
 
 **非 minified 诊断通道（手动触发，不是门禁）**：`web/e2e/hydration-probe.js` 在
 `next dev`（React 开发版、错误信息不压缩）下跑 N 轮，每轮新建唯一账号/看板，

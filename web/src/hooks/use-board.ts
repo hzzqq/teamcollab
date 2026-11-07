@@ -1,9 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { applyOptimisticMove } from "@/lib/drag-position";
-import { useHydrated } from "@/hooks/use-hydrated";
 import type {
   BatchTaskRequest,
   BoardDetail,
@@ -22,15 +22,17 @@ export function boardsQueryKey(teamId: string) {
 
 /** 团队的看板列表 */
 export function useBoards(teamId: string) {
-  const hydrated = useHydrated();
+  // 局部 mounted 闸门：缓存命中时 CSR 首帧 isLoading 直接变 false 而 SSR 恒为 true，
+  // StateSwitch 内容 vs 骨架屏不一致（React #418）。挂载前强制 isLoading=true。
+  // 用组件局部 useState(mounted)，不复用全局标志位（race 缺陷）。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const query = useQuery({
     queryKey: boardsQueryKey(teamId),
     queryFn: () => api.teamsBoards(teamId),
     enabled: Boolean(teamId),
   });
-  // 首屏闸门：缓存命中时 CSR 首帧 isLoading 直接变 false 而 SSR 恒为 true，
-  // StateSwitch 内容 vs 骨架屏不一致（React #418）。挂载前强制 isLoading=true。
-  return { ...query, isLoading: hydrated ? query.isLoading : true };
+  return { ...query, isLoading: mounted ? query.isLoading : true };
 }
 
 export function useCreateBoard(teamId: string) {
@@ -64,14 +66,15 @@ export function useDeleteBoard(teamId: string) {
 
 /** 看板详情（列 + 任务） */
 export function useBoard(boardId: string) {
-  const hydrated = useHydrated();
+  // 局部 mounted 闸门：与 useBoards 同理，避免看板详情首帧内容 vs 骨架屏不一致（React #418）。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const query = useQuery({
     queryKey: boardQueryKey(boardId),
     queryFn: () => api.boardDetail(boardId),
     enabled: Boolean(boardId),
   });
-  // 首屏闸门：与 useBoards 同理，避免看板详情首帧内容 vs 骨架屏不一致（React #418）。
-  return { ...query, isLoading: hydrated ? query.isLoading : true };
+  return { ...query, isLoading: mounted ? query.isLoading : true };
 }
 
 export function useCreateColumn(boardId: string) {

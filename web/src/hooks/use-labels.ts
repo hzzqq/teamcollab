@@ -1,8 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { useHydrated } from "@/hooks/use-hydrated";
 import type { Label, LabelColor, UpdateLabelRequest } from "@/lib/api-types";
 
 export function labelsQueryKey(teamId: string) {
@@ -11,15 +11,16 @@ export function labelsQueryKey(teamId: string) {
 
 /** 团队标签列表（viewer+） */
 export function useLabels(teamId: string) {
-  const hydrated = useHydrated();
+  // 局部 mounted 闸门：缓存命中时 CSR 首帧 isLoading 直接变 false 而 SSR 恒为 true，
+  // StateSwitch 内容 vs 骨架屏不一致（React #418）。挂载前强制 isLoading=true。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const query = useQuery({
     queryKey: labelsQueryKey(teamId),
     queryFn: () => api.labels(teamId),
     enabled: Boolean(teamId),
   });
-  // 首屏闸门：缓存命中时 CSR 首帧 isLoading 直接变 false 而 SSR 恒为 true，
-  // StateSwitch 内容 vs 骨架屏不一致（React #418）。挂载前强制 isLoading=true。
-  return { ...query, isLoading: hydrated ? query.isLoading : true };
+  return { ...query, isLoading: mounted ? query.isLoading : true };
 }
 
 /** 整体覆盖任务标签（member+） */

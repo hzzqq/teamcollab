@@ -244,3 +244,43 @@ cd server && .venv/Scripts/python.exe scripts/multi_instance_verify.py
 4. position 空列基准：`scalar(...) or -1` 中 `0 or -1` 吞 0 → 显式 None 判断（tasks/columns 两处）
 5. 测试基建：conftest 无数据清理导致固定邮箱用例重复跑冲突 → session 级 TRUNCATE
 6. SSE 测试：TestClient 对长连接流读取挂起（端点实测正常）→ 改为 generator 契约验证
+
+## 本地演示：一键启动 / 停止 / 看日志
+
+仓库根目录下执行（脚本按自身所在位置推断仓库根，跨机 clone 无需改路径）：
+
+```powershell
+# Windows（PowerShell 5.1）
+powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1             # 干净启动
+powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1 -Log -Tail 60
+powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1 -Stop
+powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1 -WhatIf     # 只预报
+```
+
+```bash
+# Linux / WSL（bash + nohup setsid）
+./scripts/start-teamcollab.sh
+./scripts/start-teamcollab.sh --log 60
+./scripts/start-teamcollab.sh --stop
+./scripts/start-teamcollab.sh --what-if
+```
+
+脚本流程：确保 PostgreSQL 就绪 → **只**停本项目自己的陈旧 uvicorn / next 实例（按命令行特征匹配，
+绝不误杀 ks 或平台进程）→ 起后端 `:8000` + 前端 `:3000` → 幂等灌演示账号
+（`pm@example.com` / `dev@example.com`，均 `pass1234`）→ 轮询就绪 + 真实登录校验。
+日志落在仓库根 `logs/`（已 gitignore），`-Log` / `--log` 可看尾部。
+
+**端口真相源**：前端 `NEXT_PUBLIC_API_BASE` 在 `next build` 时烤死为 `http://localhost:8000`，
+故后端默认 8000。仓库根 `.port.env`（port-doctor 生成、本机文件、已 gitignore）里的 `PORT`
+可能是别的值——脚本会**显式警告但不自动跟随**，避免后端换端口导致前后端静默断链。
+确需换端口：显式 `-BackendPort` / `--backend-port`，并同步重编前端或配 nginx 同源代理。
+
+**跨天提示**：本机后台进程会在跨天 / 重启时被清掉，服务不是常驻守护进程；重新跑一次脚本即可
+恢复（PG 已服务化会自动就绪）。ks/StockSignal 用 8899/5050/5052，与本项目 3000/8000 不重叠，
+**不存在端口冲突**。端口被非本项目进程占用时：前端默认自动避让，后端报错并给出建议
+（需 `-AutoAvoid` / `--auto-avoid` 才避让）。
+
+**浏览器 E2E**：`web/e2e/mainline-e2e.js`（Spec §2 验收主线）、
+`web/e2e/subtasks-e2e.js`（批次 4C 多层级子任务 + `subtask_count` 列）。
+本机跑需把 `NODE_PATH` 指向本机 playwright-core 所在目录（如 `.pgtmp/pw/node_modules`）；
+CI 由 `e2e-browser` job 执行。

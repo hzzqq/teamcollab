@@ -13,7 +13,7 @@
 | 数据库 | PostgreSQL 17（本地环境使用 .pgtmp 独立实例；正式环境 docker-compose） |
 | 缓存/多实例 | Redis 7（可选，REDIS_URL 配置后：SSE 广播 / 限流共享计数 / 调度器互斥三件套一键切换） |
 | 实时 | SSE（EventSource），WebSocket 预留扩展位 |
-| 测试 | 后端 pytest **189 全绿**（173 基线 + 6 保存视图 + 10 子任务） + ruff 全绿 + OpenAPI 契约漂移门禁（**36 路径 / 52 方法**）；前端 **56 单测** + tsc + ESLint + `next build`；浏览器 E2E 七套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流 / 列表视图） |
+| 测试 | 后端 pytest **200 全绿**（173 基线 + 6 保存视图 + 10 子任务 + 11 端口纯函数） + ruff 全绿 + OpenAPI 契约漂移门禁（**36 路径 / 52 方法**）；前端 **56 单测** + tsc + ESLint + `next build`；浏览器 E2E 八套（视觉 / 后台 / 主线 / 搜索 / 任务详情 / 活动流 / 列表视图 / 多层级子任务） |
 
 ## 目录
 
@@ -298,6 +298,14 @@ CI 由 `e2e-browser` job 执行。
 用最小 HTTP 替身解耦应用本身，真实 uvicorn / next 进程的启动由 `e2e-browser` job 覆盖。
 `port_env.py` 的纯函数单测在 `server/tests/test_port_env.py`（CI backend job 执行）。
 
+该 job 还把 Linux runner 的 `--probe` 端口快照写进 **Step Summary** 并归档为
+`linux-port-probe` artifact；同时在 `pwsh` 里对两个 Windows `.ps1` 做
+`Parser::ParseFile` 语法 + **UTF-8 BOM** + 换行一致性静态校验（BOM 是 Windows
+PowerShell 5.1 正确解析中文脚本的硬要求；仓库内两个脚本是 BOM + **LF**，实测可运行，
+因此只禁止 CRLF/LF 混用、不强制 CRLF）。`port-resolver-windows` job 另在
+`windows-latest` 真机实跑 `-Probe` 与 `-Port 3000 -FindFree`，覆盖 Linux 静态校验
+测不到的 `Get-NetTCPConnection` / CIM / 5.1 中文解析路径。
+
 **端口冲突排查（多项目同机演示）**：`scripts/port-resolver.ps1`（Windows PowerShell 5.1）：
 
 ```powershell
@@ -333,3 +341,24 @@ SSR/CSR 恒为 `light`、挂载后再对齐 localStorage（真实主题仍由 `<
 E2E 现同时收集 `console.error` 与 `pageerror` 堆栈 + 触发 URL，复发时可直接定点定位。
 **诚实边界**：因该问题偶发且未拿到非 minified 完整堆栈，以上不能宣称 100% 根治；
 若 CI 再次复现，按新打印的诊断输出定位具体组件再修。
+
+**非 minified 诊断通道（手动触发，不是门禁）**：`web/e2e/hydration-probe.js` 在
+`next dev`（React 开发版、错误信息不压缩）下跑 N 轮，每轮新建唯一账号/看板，
+走 `/login` → `/me/tasks` → 列表视图 → 任务详情抽屉深链，收集
+`console.error` 全文 + 序列化 args + `location` + `pageerror` 完整 stack + 触发 URL。
+在 GitHub Actions 手动执行 workflow（**Actions → CI → Run workflow**），可填
+`probe_rounds`（默认 10）；`hydration-probe` job 会起真 PG/Redis/后端 +
+`next dev :3002`，用 `NEXT_PUBLIC_API_SAME_ORIGIN=1` 走 `next.config.ts` 的
+development rewrite（避开 CORS 白名单，仅 `3000/5173`），报告写入 Step Summary
+并归档为 `hydration-probe` artifact。
+
+本机也可直接跑（生产实例即可验证脚本可用性，但拿不到非 minified 组件栈）：
+
+```bash
+NODE_PATH=<playwright-core 所在 node_modules> PROBE_ROUNDS=1 \
+  PROBE_OUT=.pgtmp/hydration-probe.txt node web/e2e/hydration-probe.js
+```
+
+脚本**退出码恒为 0**：偶发问题没复现是正常结果，不把诊断工具变成红灯门禁。
+报告同时列出非 hydration 的运行时错误样本（如 `favicon.ico` 404 这类环境噪音），
+便于区分「真问题」与「噪音」。**未复现 ≠ 已根治**，价值在于复发时直接给出组件栈。

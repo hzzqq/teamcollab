@@ -192,6 +192,19 @@ if LC_ALL=C grep -q $'\r' "$PTH"; then fail "port-resolver.sh 含 CRLF"; fi
 probe_out="$(bash "$PTH" --probe 2>&1)" || { echo "$probe_out"; fail "--probe 非 0 退出"; }
 grep -q '常用演示端口占用排查' <<<"$probe_out" || { echo "$probe_out"; fail "--probe 输出异常"; }
 grep -q 'TeamCollab\|空闲' <<<"$probe_out" || fail "--probe 未列出端口状态"
+# CI 产物：写文件供 upload-artifact 归档，同时写进 Step Summary 便于在 run 页面直接查看
+if [[ -n "${PORT_PROBE_OUT:-}" ]]; then
+  mkdir -p "$(dirname "$PORT_PROBE_OUT")" 2>/dev/null || true
+  printf '%s\n' "$probe_out" > "$PORT_PROBE_OUT"
+fi
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    echo '### Linux runner 常用演示端口快照'
+    echo '```'
+    printf '%s\n' "$probe_out"
+    echo '```'
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
 free_port="$(bash "$PTH" --find-free 18000 2>&1)" || fail "--find-free 非 0 退出"
 [[ "$free_port" =~ ^[0-9]+$ ]] || fail "--find-free 未返回数字: $free_port"
 port_out="$(bash "$PTH" --port 18000 --what-if 2>&1)" || fail "--port 非 0 退出"

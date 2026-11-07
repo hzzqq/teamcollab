@@ -43,6 +43,9 @@ logs/
 # ===== E2E 截图（验收主线浏览器测试产物，非源码） =====
 web/e2e/shots/
 
+# ===== CI / 诊断脚本产物（端口快照、hydration 报告） =====
+artifacts/
+
 # ===== OS / editor =====
 .DS_Store
 Thumbs.db

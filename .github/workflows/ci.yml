@@ -9,6 +9,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # 手动触发才跑 hydration-probe：诊断工具不是门禁，不占每次 push 的时间
+  workflow_dispatch:
+    inputs:
+      probe_rounds:
+        description: "hydration-probe 轮次（next dev 非 minified，每轮新建账号/看板）"
+        required: false
+        default: "10"
+        type: string
 
 jobs:
   backend:
@@ -218,9 +226,203 @@ jobs:
   # 真实 uvicorn + next 进程的启动已由上面的 e2e-browser job 覆盖。
   validate-startup-sh:
     runs-on: ubuntu-24.04
+    env:
+      # verify-startup-sh.sh 会把 --probe 快照写到该文件，并同时写进 GITHUB_STEP_SUMMARY
+      PORT_PROBE_OUT: artifacts/linux-port-probe.txt
     steps:
       - uses: actions/checkout@v5
 
       - name: 真 Linux 实测 scripts/start-teamcollab.sh
         run: bash scripts/ci/verify-startup-sh.sh
+
+      # Windows 脚本没法在 Linux 上真跑（Get-NetTCPConnection 等 cmdlet 缺失），
+      # 但语法/编码可以在 pwsh 里静态验掉。两个 .ps1 实际是 UTF-8 BOM + LF：
+      # Windows PowerShell 5.1 读中文 .ps1 必须有 BOM；LF 换行实测可运行，故只禁止
+      # CRLF/LF 混用，不强制 CRLF。
+      - name: Windows 版脚本静态校验（Parser + BOM + 换行一致性）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($f in @('scripts/port-resolver.ps1', 'scripts/start-teamcollab.ps1')) {
+            $bytes = [System.IO.File]::ReadAllBytes($f)
+            if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+              throw "${f} 缺少 UTF-8 BOM（Windows PowerShell 5.1 会把中文读成 GBK 导致解析失败）"
+            }
+            $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+            $crlf = ([regex]::Matches($text, "`r`n")).Count
+            $lfOnly = ([regex]::Matches($text, "(?<!`r)`n")).Count
+            if ($crlf -gt 0 -and $lfOnly -gt 0) { throw "${f} CRLF/LF 混用" }
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f).Path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              foreach ($e in $errors) {
+                Write-Host ("::error file={0},line={1}::{2}" -f $f, $e.Extent.StartLineNumber, $e.Message)
+              }
+              throw "${f} 存在 $($errors.Count) 个 PowerShell 语法错误"
+            }
+            $nl = if ($crlf -gt 0) { 'CRLF' } else { 'LF' }
+            Write-Host ("OK: {0}  BOM=utf8  newline={1}  parseErrors=0  lines={2}" -f $f, $nl, $text.Split("`n").Length)
+          }
+
+      - name: 归档 Linux 端口快照
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-port-probe
+          path: artifacts/
+          if-no-files-found: warn
+
+  # Windows 真机：Linux 静态校验补不了的运行时部分（Get-NetTCPConnection / CIM /
+  # Windows PowerShell 5.1 的中文 BOM 解析）。-Probe 只读，不释放任何端口。
+  port-resolver-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 真机实跑 scripts/port-resolver.ps1 -Probe
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Probe
+          if ($LASTEXITCODE -ne 0) { throw "-Probe 退出码 $LASTEXITCODE" }
+
+      - name: 真机校验 -Port 3000 -FindFree 返回可用端口
+        shell: powershell
+        # 坑：-FindFree 必须和 -Port 一起给（脚本里是 `if ($FindFree -and $Port)`），单独传会空跑
+        run: |
+          $out = powershell -ExecutionPolicy Bypass -File .\scripts\port-resolver.ps1 -Port 3000 -FindFree
+          if ($LASTEXITCODE -ne 0) { throw "-FindFree 退出码 $LASTEXITCODE" }
+          # 合并成单个字符串：数组上用 -match 不会填充 $Matches；且中文可能被 GBK 解码成
+          # 乱码，故只匹配行尾端口号，不依赖中文文案。
+          $text = ($out | Out-String).Trim()
+          Write-Host $text
+          if (-not ($text -match ':\s*(\d{4,5})\s*$')) { throw "-FindFree 未返回空闲端口: $text" }
+          $free = [int]$Matches[1]
+          if ($free -lt 3000 -or $free -ge 3200) { throw "空闲端口超出 3000~3199 区间: $free" }
+          Write-Host "OK: -FindFree 返回 $free"
+
+  # 手动触发：在 next dev（React 非 minified）下跑 N 轮，抓 hydration 错误的完整组件栈。
+  # 生产 build 只给 `Minified React error #418` 一行，无法定位组件；dev 版会打印组件树。
+  # 这不是门禁：脚本退出码恒 0（偶发问题未复现属正常结果），报告归档供人读。
+  hydration-probe:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: collab
+          POSTGRES_PASSWORD: collab
+          POSTGRES_DB: collab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U collab -d collab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://collab:collab@localhost:5432/collab
+      REDIS_URL: redis://localhost:6379/0
+      # 每轮 probe 都注册账号 + 两次登录，且浏览器经 rewrite 后与 Node 直连同为 127.0.0.1；
+      # 默认 10 次/分钟的 auth 限流会被打爆，必须与 backend job 的 API e2e 同款放开。
+      RATE_LIMIT_AUTH_PER_MINUTE: "100000"
+      RATE_LIMIT_GENERAL_PER_MINUTE: "1000000"
+      # 前端走同源 /api/*，由 next dev 的 rewrites 转发；后端 CORS 白名单只有
+      # 3000/5173，没有 3002，所以不能让浏览器直连后端。
+      NEXT_PUBLIC_API_SAME_ORIGIN: "1"
+      NEXT_PUBLIC_API_MODE: real
+      # rewrite 目标明确 IPv4，避免 runner 上 localhost 被解析成 ::1 而后端只绑 127.0.0.1
+      DEV_API_PROXY: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install backend deps
+        working-directory: server
+        run: pip install -r requirements-dev.txt
+
+      - name: Run migrations
+        working-directory: server
+        run: python -m alembic upgrade head
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-save playwright@1.51.1
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start backend (:8000)
+        working-directory: server
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/probe-backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/openapi.json > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf -o /dev/null -w "backend /openapi.json HTTP %{http_code}\n" http://127.0.0.1:8000/openapi.json
+
+      - name: Start frontend (next dev :3002)
+        run: |
+          npm run dev -- -p 3002 > /tmp/next-dev.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -sf -o /dev/null http://127.0.0.1:3002/login; then break; fi
+            sleep 1
+          done
+          curl -sf -o /dev/null -w "frontend /login HTTP %{http_code}\n" http://127.0.0.1:3002/login
+          echo "--- next dev log (head) ---"
+          head -30 /tmp/next-dev.log
+
+      - name: Run hydration probe (non-minified, PROBE_ROUNDS=${{ github.event.inputs.probe_rounds || '10' }})
+        env:
+          E2E_BASE: http://127.0.0.1:3002
+          E2E_API: http://127.0.0.1:8000
+          PROBE_ROUNDS: "${{ github.event.inputs.probe_rounds || '10' }}"
+          PROBE_OUT: artifacts/hydration-probe.txt
+        run: node e2e/hydration-probe.js
+
+      - name: 写 Step Summary
+        if: always()
+        run: |
+          {
+            echo "### hydration-probe（next dev 非 minified，rounds=${{ github.event.inputs.probe_rounds || '10' }}）"
+            echo '```'
+            tail -80 artifacts/hydration-probe.txt 2>/dev/null || echo '(未生成诊断报告)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 归档诊断报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydration-probe
+          path: web/artifacts/
+          if-no-files-found: warn
+
+      - name: 打印 next dev 日志（排障用）
+        if: always()
+        run: tail -100 /tmp/next-dev.log
 

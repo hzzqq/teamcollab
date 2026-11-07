@@ -270,6 +270,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1 -WhatIf 
 （`pm@example.com` / `dev@example.com`，均 `pass1234`）→ 轮询就绪 + 真实登录校验。
 日志落在仓库根 `logs/`（已 gitignore），`-Log` / `--log` 可看尾部。
 
+> 已知限制（`.sh`）：`pgrep -f` 兜底按命令行特征匹配、**不区分端口**，同一仓库若在别的端口
+> 另起过实例（例如 `:8011` 的验证实例），会被一并停掉。单实例演示场景不受影响。
+
 **端口真相源**：前端 `NEXT_PUBLIC_API_BASE` 在 `next build` 时烤死为 `http://localhost:8000`，
 故后端默认 8000。仓库根 `.port.env`（port-doctor 生成、本机文件、已 gitignore）里的 `PORT`
 可能是别的值——脚本会**显式警告但不自动跟随**，避免后端换端口导致前后端静默断链。
@@ -284,3 +287,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-teamcollab.ps1 -WhatIf 
 `web/e2e/subtasks-e2e.js`（批次 4C 多层级子任务 + `subtask_count` 列）。
 本机跑需把 `NODE_PATH` 指向本机 playwright-core 所在目录（如 `.pgtmp/pw/node_modules`）；
 CI 由 `e2e-browser` job 执行。
+
+**脚本自身的回归**：`scripts/ci/verify-startup-sh.sh` 在 GitHub Actions `ubuntu-24.04`
+（真 Linux）上验证 `.sh` 的 `bash -n` / LF / 无 BOM、`--what-if` 全流程、
+`nohup setsid` 脱离启动 + pidfile + 脚本退出后进程仍存活、登录校验与 `--stop` 清理，
+对应 CI job `validate-startup-sh`。用最小 HTTP 替身解耦应用本身，真实 uvicorn / next
+进程的启动由 `e2e-browser` job 覆盖。

@@ -212,3 +212,15 @@ jobs:
       - name: Run subtask hierarchy e2e (批次 4C 多层级子任务 + subtask_count 列)
         run: node e2e/subtasks-e2e.js
 
+  # 真 Linux 实测一键启动脚本（scripts/start-teamcollab.sh）。
+  # 开发机 WSL 被安全策略禁用、Docker daemon 不可用，故用仓库自带的 ubuntu-24.04 runner。
+  # 只验证 shell 语义（语法 / --what-if / detached 启停 / --stop），不重复构建应用：
+  # 真实 uvicorn + next 进程的启动已由上面的 e2e-browser job 覆盖。
+  validate-startup-sh:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 真 Linux 实测 scripts/start-teamcollab.sh
+        run: bash scripts/ci/verify-startup-sh.sh
+

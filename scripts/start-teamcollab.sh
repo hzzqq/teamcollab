@@ -6,7 +6,8 @@
 #   这些在 Linux 上都不存在，硬改只会得到一个两边都跑不好的脚本。
 #
 # 注意：本文件为 LF 换行 + UTF-8（bash 要求；CRLF 会直接炸）。
-# 状态：在 Windows 本机仅做 `bash -n` 语法校验，未在真实 Linux/WSL 实测，
+# 状态：已在 GitHub Actions ubuntu-24.04（真 Linux）全链路实测，
+#       验证脚本见 scripts/ci/verify-startup-sh.sh（语法 + --what-if + detached 启停 + --stop）。
 #       PG 启动方式、node/python 路径按发行版调整下方环境变量即可。
 #
 # 用法（仓库根目录下执行）：
@@ -210,7 +211,7 @@ fi
 
 step '端到端校验 (登录 pm@example.com)'
 if (( ! DRY )); then
-  resp="$(curl -fsS --max-time 5 -X POST -d 'username=pm@example.com&password=pass1234' \
+  resp="$("$CURL_BIN" -fsS --max-time 5 -X POST -d 'username=pm@example.com&password=pass1234' \
         "http://127.0.0.1:$BACKEND_PORT/api/v1/auth/login" 2>/dev/null || true)"
   if [[ "$resp" == *'"code":0'* || "$resp" == *'"code": 0'* ]]; then
     ok "登录成功: $resp"
